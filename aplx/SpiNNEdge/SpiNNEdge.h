@@ -27,10 +27,10 @@ static const uint FILT[5][5] = {{2,4,5,4,2},
 static const uint FILT_DENOM = 159;
 
 #define TIMER_TICK_PERIOD_US 	1000000
-#define PRIORITY_TIMER			4
-#define PRIORITY_PROCESSING		3
-#define PRIORITY_SDP			2
-#define PRIORITY_MCPL			1
+#define PRIORITY_TIMER			3
+#define PRIORITY_PROCESSING		2
+#define PRIORITY_SDP			1
+#define PRIORITY_MCPL			-1
 #define PRIORITY_DMA			0
 
 #define SDP_TAG_REPLY			1
@@ -62,32 +62,48 @@ static const uint FILT_DENOM = 159;
 #define IMG_B_BUFF1_BASE		0x66000000
 
 //we also has direct key to each core (see initRouter())
-#define MCPL_BCAST_CMD_KEY		0xbca5c00d  // command for edge detection
-#define MCPL_BCAST_INFO_KEY		0xbca514f0
-#define MCPL_BCAST_FILT_KEY		0xbca5c44d	// command for filtering only
-#define MCPL_INFO_TO_LEADER		0x14f01ead
-#define MCPL_FLAG_TO_LEADER		0xf1a61ead	// worker send signal to leader
+#define MCPL_BCAST_INFO_KEY		0xbca50001	// for broadcasting ping and blkInfo
+#define MCPL_BCAST_CMD_FILT		0xbca50002	// command for filtering only
+#define MCPL_BCAST_CMD_DETECT	0xbca50003  // command for edge detection
+#define MCPL_BCAST_GET_WLOAD	0xbca50004	// trigger workers to compute workload
+#define MCPL_PING_REPLY			0x1ead0001
+#define MCPL_FILT_DONE			0x1ead0002	// worker send signal to leader
+#define MCPL_EDGE_DONE			0x1ead0003
+//key with values
+
+//some definitions
 #define FLAG_FILTERING_DONE		0xf117
 #define FLAG_DETECTION_DONE		0xde7c
-
-#define CMD_FILTERING			0x12
-#define CMD_DETECTION			0x21
 
 typedef struct block_info {
 	ushort wImg;
 	ushort hImg;
-	ushort isGrey;
+	ushort isGrey;			// 0==color, 1==gray
 	uchar opType;			// 0==sobel, 1==laplace
 	uchar opFilter;			// 0==no filtering, 1==with filtering
 	ushort nodeBlockID;		// will be send by host
 	ushort maxBlock;		// will be send by host
+	// then pointers to the image
+	uchar *imgRIn;
+	uchar *imgGIn;
+	uchar *imgBIn;
+	uchar *imgROut;
+	uchar *imgGOut;
+	uchar *imgBOut;
+	// miscellaneous info
+	uchar imageInfoRetrieved;
+	uchar fullRImageRetrieved;
+	uchar fullGImageRetrieved;
+	uchar fullBImageRetrieved;
 } block_info_t;
 
 // worker info
 typedef struct w_info {
-	uchar wID[17];			// this is the coreID, maximum worker is 17
-	uchar subBlockID[17];		// this the mapped subBlockID of workers
-	uchar available;		// should be initialized to 1
+	uchar wID[17];			// coreID of all workers (max is 17), hold by leadAp
+	uchar subBlockID;		// this will be hold individually by each worker
+	uchar tAvailable;		// total available workers, should be initialized to 1
+	ushort startLine;
+	ushort endLine;
 } w_info_t;
 
 
@@ -103,17 +119,6 @@ typedef struct w_info {
  *		imgBIn will start from IMG_B_BUFF1_BASE and resulting in IMG_B_BUFF0_BASE
  *
 */
-uchar *imgRIn;
-uchar *imgGIn;
-uchar *imgBIn;
-uchar *imgROut;
-uchar *imgGOut;
-uchar *imgBOut;
-
-uchar imageInfoRetrieved;
-uchar fullRImageRetrieved;
-uchar fullGImageRetrieved;
-uchar fullBImageRetrieved;
 
 // for dma operation
 #define DMA_FETCH_IMG_TAG		0x14
@@ -125,32 +130,40 @@ uint szDMA;
 
 uint myCoreID;
 w_info_t workers;
-block_info_t blkInfo;
-uchar nJobDone;				// will be used to count how many workers have
-							// finished their job in either filtering or edge detection
+block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
+uchar nFiltJobDone;				// will be used to count how many workers have
+uchar nEdgeJobDone;				// finished their job in either filtering or edge detection
 
-sdp_msg_t *replyMsg;
+sdp_msg_t *reportMsg;
 
 // forward declaration
-void triggerWorker(uint arg0, uint arg1);
-void triggerPreProcessing(uint arg0, uint arg1);	// after filterning, leadAp needs to copy
+void triggerProcessing(uint arg0, uint arg1);	// after filterning, leadAp needs to copy
 													// the content from FIL_IMG to ORG_IMG
-void imgProcessing(uint arg0, uint arg1);	// this might be the most intense function
+void imgDetection(uint arg0, uint arg1);	// this might be the most intense function
 void imgFiltering(uint arg0, uint arg1);	// this is separate operation from edge detection
 void initSDP();
 void initRouter();
 void initImage();
+void initIPTag();
 void hDMADone(uint tid, uint tag);
 void hTimer(uint tick, uint Unused);
 void hMCPL(uint key, uint payload);
-void pingWorkers(uint arg0, uint arg1);
 void imgFiltering(uint arg0, uint arg1);
 void imgProcessing(uint arg0, uint arg1);
-/*--------------------------------------- IMPLEMENTATIONS --------------------------------------*/
+void cleanUp();
+void computeWLoad(uint arg0, uint arg1);
+void afterFiltDone(uint arg0, uint arg1);
+void afterEdgeDone(uint arg0, uint arg1);
 
-// PrepareMemImage() will allocate and deallocate sdram.
-// It should be handled by one core (ie. leadAp) in a chip.
+// for copying image from sdp to sdram via dma
+static uchar *dtcmImgBuf = NULL;
+volatile uchar dmaImg2SDRAMdone;
+ushort dLen;
+uchar whichRGB;	//0=R, 1=G, 2=B
 
+// helper/debugging functions
+void printImgInfo(uint opType, uint None);
+void printWID(uint None, uint Neno);
 
 #endif // SPINNEDGE_H
 

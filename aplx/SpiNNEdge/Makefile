@@ -42,7 +42,7 @@ GP  := $(GNUBIN)/arm-none-eabi
 
 INC_DIR := $(SPINN_DIRS)/include
 BUILD_DIR = build/
-OUTPUT_DIR := ./
+OUTPUT_DIR := ../binaries/
 
 #-------------------------------------------------------------------------------
 

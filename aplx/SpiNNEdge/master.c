@@ -1,14 +1,61 @@
 #include "SpiNNEdge.h"
 
+
+/* TODO:
+ * - We can use hTimer for pooling workers from time to time (to find out,
+ *   which one is alive).
+ * */
 void hTimer(uint tick, uint Unused)
 {
-	io_printf(IO_STD, "tick-%d\n", tick);
-	// debugging MCPL
-	if(tick==5) {
+	// first-tick: populate workers
+	if(tick==1) {
+		sark_delay_us(1000*sv->p2p_addr);
+		io_printf(IO_BUF, "Collecting worker IDs...\n");
+		/* Initial process: broadcast info:
+		 * payload == 0 : ping
+		 * payload != 0 : location of block_info_t variable
+		 * */
+		spin1_send_mc_packet(MCPL_BCAST_INFO_KEY, 0, WITH_PAYLOAD);
+		spin1_send_mc_packet(MCPL_BCAST_INFO_KEY, (uint)blkInfo, WITH_PAYLOAD);
+	}
+	// second tick: broadcast info to workers, assuming 1-sec is enough for ID collection
+	else if(tick==2) {
+		sark_delay_us(1000*sv->p2p_addr);
+		io_printf(IO_BUF, "Distributing wIDs...\n");
+		// payload.high = tAvailable, payload.low = wID
+		for(uint i= 1; i<workers.tAvailable; i++)
+			spin1_send_mc_packet(workers.wID[i], (workers.tAvailable << 16) + i, WITH_PAYLOAD);
+	}
+	else if(tick==3) {
+		// debugging
+		printWID(0,0);
+		sark_delay_us(1000*sv->p2p_addr);
+		io_printf(IO_STD, "Chip-%d ready!\n", sv->p2p_addr);
+	}
+	else if(tick==4) {
+		ushort x = (sv->p2p_addr >> 8) * 2;
+		ushort y = (sv->p2p_addr) & 0xFF;
+		sark_delay_us(1000*sv->p2p_addr);
+		io_printf(IO_STD, "Simulating 1000x1007 pixels!\n");
+		blkInfo->isGrey = 0; //1=Grey, 0=color
+		blkInfo->wImg = 1000;
+		blkInfo->hImg = 1007;
+		blkInfo->nodeBlockID = x+y;
+		blkInfo->maxBlock = 4;
+		blkInfo->imageInfoRetrieved = 1;
+		spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
+		computeWLoad(0,0);
+	}
+	else {
 
 	}
 }
 
+// TODO: initIPTag()
+void initIPTag()
+{
+
+}
 
 /*
 // Let's use:
@@ -37,57 +84,43 @@ void hSDP(uint mBox, uint port)
 	// loaded into sdram via ybug operation
 	if(port==SDP_PORT_CONFIG) {
 		if(msg->cmd_rc == SDP_CMD_CONFIG) {
-			blkInfo.isGrey = msg->seq >> 8; //1=Gray, 0=color
-			blkInfo.wImg = msg->arg1 >> 16;
-			blkInfo.hImg = msg->arg1 & 0xFFFF;
-			blkInfo.nodeBlockID = msg->arg2 >> 16;
-			blkInfo.maxBlock = msg->arg2 & 0xFF;
+			blkInfo->isGrey = msg->seq >> 8; //1=Grey, 0=color
+			blkInfo->wImg = msg->arg1 >> 16;
+			blkInfo->hImg = msg->arg1 & 0xFFFF;
+			blkInfo->nodeBlockID = msg->arg2 >> 16;
+			blkInfo->maxBlock = msg->arg2 & 0xFF;
 			switch(msg->seq & 0xFF) {
 			case IMG_OP_SOBEL_NO_FILT:
-				blkInfo.opFilter = IMG_NO_FILTERING; blkInfo.opType = IMG_SOBEL;
+				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_SOBEL;
 				break;
 			case IMG_OP_SOBEL_WITH_FILT:
-				blkInfo.opFilter = IMG_WITH_FILTERING; blkInfo.opType = IMG_SOBEL;
+				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_SOBEL;
 				break;
 			case IMG_OP_LAP_NO_FILT:
-				blkInfo.opFilter = IMG_NO_FILTERING; blkInfo.opType = IMG_LAPLACE;
+				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_LAPLACE;
 				break;
 			case IMG_OP_LAP_WITH_FILT:
-				blkInfo.opFilter = IMG_WITH_FILTERING; blkInfo.opType = IMG_LAPLACE;
+				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_LAPLACE;
 				break;
 			}
-			imageInfoRetrieved = 1;
+			blkInfo->imageInfoRetrieved = 1;
 
 			// just debugging:
-			io_printf(IO_BUF, "Image w = %d, h = %d, ", blkInfo.wImg, blkInfo.hImg);
-			if(blkInfo.isGrey==1)
-				io_printf(IO_BUF, "grascale, ");
-			else
-				io_printf(IO_BUF, "color, ");
-			switch(msg->seq & 0xFF) {
-			case IMG_OP_SOBEL_NO_FILT:
-				io_printf(IO_BUF, "for sobel without filtering\n");
-				break;
-			case IMG_OP_SOBEL_WITH_FILT:
-				io_printf(IO_BUF, "for sobel with filtering\n");
-				break;
-			case IMG_OP_LAP_NO_FILT:
-				io_printf(IO_BUF, "for laplace without filtering\n");
-				break;
-			case IMG_OP_LAP_WITH_FILT:
-				io_printf(IO_BUF, "for laplace with filtering\n");
-				break;
-			}
-			io_printf(IO_BUF, "nodeBlockID = %d with maxBlock = %d\n",
-					  blkInfo.nodeBlockID, blkInfo.maxBlock);
+			spin1_schedule_callback(printImgInfo, msg->seq, 0, PRIORITY_PROCESSING);
+			// then inform workers to compute workload
+			spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
+			computeWLoad(0,0);
 		}
+		// TODO: don't forget to give a "kick" from python?
+		/*
 		else if(msg->cmd_rc == SDP_CMD_PROCESS) {
 			// if filtering is required, it should be proceeded first
-			if(blkInfo.opFilter==IMG_WITH_FILTERING)
+			if(blkInfo->opFilter==IMG_WITH_FILTERING)
 				spin1_schedule_callback(triggerWorker,CMD_FILTERING,0,PRIORITY_PROCESSING);
 			else
 				spin1_schedule_callback(triggerWorker,CMD_DETECTION,0,PRIORITY_PROCESSING);
 		}
+		*/
 		else if(msg->cmd_rc == SDP_CMD_CLEAR) {
 			initImage();
 		}
@@ -96,83 +129,159 @@ void hSDP(uint mBox, uint port)
 	// NOTE: what if we use arg part of SCP for image data? OK let's try, because see HOW.DO...
 	else if(port==SDP_PORT_R_IMG_DATA) {
 		// get the image data from SCP+data_part
-		ushort dLen = msg->length - sizeof(sdp_hdr_t);
+		dLen = msg->length - sizeof(sdp_hdr_t);	// dLen is used by hDMADone()
 		//io_printf(IO_BUF, "Receiving %d-bytes\n", dLen);
 
 		if(dLen > 0) {
+			// in the beginning, dtcmImgBuf is NULL
+			if(dtcmImgBuf==NULL) {
+				dtcmImgBuf = sark_alloc(sizeof(cmd_hdr_t) + SDP_BUF_SIZE, sizeof(uchar));
+				dmaImg2SDRAMdone = 1;	// will be set in hDMA()
+				whichRGB = SDP_PORT_R_IMG_DATA;
+			}
 
-			spin1_memcpy((void *)imgRIn, (void *)&msg->cmd_rc, dLen);
-			imgRIn += dLen;
+			// if the previous dma transfer is still in progress...
+			while(dmaImg2SDRAMdone==0) {
+			}
+			// copy to dtcm buffer, if the previous transfer is complete
+			// spin1_memcpy((void *)imgRIn, (void *)&msg->cmd_rc, dLen);
+			dmaImg2SDRAMdone = 0;	// reset the dma done flag
+			spin1_memcpy((void *)dtcmImgBuf, (void *)&msg->cmd_rc, dLen);
+			spin1_dma_transfer(DMA_STORE_IMG_TAG, (void *)blkInfo->imgRIn, (void *)dtcmImgBuf,
+							   DMA_WRITE, dLen);
+			// imgRIn += dLen; -> moved to hDMADone
 
-			// send reply
-			replyMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
-			replyMsg->seq = dLen;
-			spin1_send_sdp_msg(replyMsg, 10);
+			// send reply immediately
+			reportMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
+			reportMsg->seq = dLen;
+			reportMsg->length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+			spin1_send_sdp_msg(reportMsg, 10);
 		}
 		// if zero data is sent, means the end of message transfer!
 		else {
 			io_printf(IO_STD, "layer-R is complete!\n");
-			imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
-			fullRImageRetrieved = 1;
+			sark_free(dtcmImgBuf);
+			dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
+			blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
+			blkInfo->fullRImageRetrieved = 1;
+			if(blkInfo->isGrey==1)
+				spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
 		}
 	}
 	else if(port==SDP_PORT_G_IMG_DATA) {
 		// get the image data from SCP+data_part
-		ushort dLen = msg->length - sizeof(sdp_hdr_t);
+		dLen = msg->length - sizeof(sdp_hdr_t);
 		//io_printf(IO_BUF, "Receiving %d-bytes\n", dLen);
 
 		if(dLen > 0) {
+			if(dtcmImgBuf==NULL) {
+				dtcmImgBuf = sark_alloc(sizeof(cmd_hdr_t) + SDP_BUF_SIZE, sizeof(uchar));
+				dmaImg2SDRAMdone = 1;
+				whichRGB = SDP_PORT_G_IMG_DATA;
+			}
 
-			spin1_memcpy((void *)imgGIn, (void *)&msg->cmd_rc, dLen);
-			imgGIn += dLen;
+			// wait the previous dma transfer
+			while(dmaImg2SDRAMdone==0) {
+			}
+			// spin1_memcpy((void *)imgGIn, (void *)&msg->cmd_rc, dLen);
+			dmaImg2SDRAMdone = 0;	// reset the dma done flag
+			spin1_memcpy((void *)dtcmImgBuf, (void *)&msg->cmd_rc, dLen);
+			spin1_dma_transfer(DMA_STORE_IMG_TAG, (void *)blkInfo->imgGIn, (void *)dtcmImgBuf,
+							   DMA_WRITE, dLen);
 
 			// send reply
-			replyMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
-			replyMsg->seq = dLen;
-			spin1_send_sdp_msg(replyMsg, 10);
+			reportMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
+			reportMsg->seq = dLen;
+			reportMsg->length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+			spin1_send_sdp_msg(reportMsg, 10);
 		}
 		// if zero data is sent, means the end of message transfer!
 		else {
 			io_printf(IO_STD, "layer-G is complete!\n");
-			imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
-			fullGImageRetrieved = 1;
+			sark_free(dtcmImgBuf);
+			dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
+			blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
+			blkInfo->fullGImageRetrieved = 1;
 		}
 	}
 	else if(port==SDP_PORT_B_IMG_DATA) {
 		// get the image data from SCP+data_part
-		ushort dLen = msg->length - sizeof(sdp_hdr_t);
+		dLen = msg->length - sizeof(sdp_hdr_t);
 		//io_printf(IO_BUF, "Receiving %d-bytes\n", dLen);
 
 		if(dLen > 0) {
 
-			spin1_memcpy((void *)imgBIn, (void *)&msg->cmd_rc, dLen);
-			imgBIn += dLen;
+			if(dtcmImgBuf==NULL) {
+				dtcmImgBuf = sark_alloc(sizeof(cmd_hdr_t) + SDP_BUF_SIZE, sizeof(uchar));
+				dmaImg2SDRAMdone = 1;
+				whichRGB = SDP_PORT_B_IMG_DATA;
+			}
+			// wait for the previous dma transfer
+			while(dmaImg2SDRAMdone==0) {
+			}
+			dmaImg2SDRAMdone = 0;	// reset the dma done flag
+			spin1_memcpy((void *)dtcmImgBuf, (void *)&msg->cmd_rc, dLen);
+			spin1_dma_transfer(DMA_STORE_IMG_TAG, (void *)blkInfo->imgBIn, (void *)dtcmImgBuf,
+							   DMA_WRITE, dLen);
 
 			// send reply
-			replyMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
-			replyMsg->seq = dLen;
-			spin1_send_sdp_msg(replyMsg, 10);
+			reportMsg->cmd_rc = SDP_CMD_REPLY_HOST_SEND_IMG;
+			reportMsg->seq = dLen;
+			reportMsg->length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+			spin1_send_sdp_msg(reportMsg, 10);
 		}
 		// if zero data is sent, means the end of message transfer!
 		else {
 			io_printf(IO_STD, "layer-B is complete!\n");
-			imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
-			fullBImageRetrieved = 1;
+			sark_free(dtcmImgBuf);
+			dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
+			blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
+			blkInfo->fullBImageRetrieved = 1;
+			// at the end of B image transmission, it should trigger processing
+			spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
 		}
 	}
 	spin1_msg_free(msg);
 }
 
+void triggerProcessing(uint arg0, uint arg1)
+{
+	if(blkInfo->opFilter==1) {
+		// broadcast command for filtering
+		nFiltJobDone = 0;
+		spin1_send_mc_packet(MCPL_BCAST_CMD_FILT, 0, WITH_PAYLOAD);
+	}
+	else {
+		nEdgeJobDone = 0;
+		// broadcast command for detection
+		spin1_send_mc_packet(MCPL_BCAST_CMD_DETECT, 0, WITH_PAYLOAD);
+	}
+}
+
+// afterFiltDone() will swap BUFF1_BASE to BUFF0_BASE
+void afterFiltDone(uint arg0, uint arg1)
+{
+
+}
+
+// afterEdgeDone() send the result to host?
+void afterEdgeDone(uint arg0, uint arg1)
+{
+
+}
+
 void initSDP()
 {
 	spin1_callback_on(SDP_PACKET_RX, hSDP, PRIORITY_SDP);
-	replyMsg->flags = 0x07;	//no reply
-	replyMsg->tag = SDP_TAG_REPLY;
-	replyMsg->srce_port = SDP_PORT_CONFIG;
-	replyMsg->srce_addr = sv->p2p_addr;
-	replyMsg->dest_port = PORT_ETH;
-	replyMsg->dest_addr = sv->eth_addr;
-	replyMsg->length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+	reportMsg->flags = 0x07;	//no reply
+	reportMsg->tag = SDP_TAG_REPLY;
+	reportMsg->srce_port = SDP_PORT_CONFIG;
+	reportMsg->srce_addr = sv->p2p_addr;
+	reportMsg->dest_port = PORT_ETH;
+	reportMsg->dest_addr = sv->eth_addr;
+	//reportMsg->length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+	// prepare iptag?
+	initIPTag();
 }
 
 /* initRouter() initialize MCPL routing table by leadAp. Use two keys:
@@ -182,6 +291,9 @@ void initRouter()
 {
 	uint allRoute = 0xFFFF80;	// excluding core-0 and external links
 	uint leader = (1 << (myCoreID+6));
+	uint workers = allRoute & ~leader;
+
+	// first, set individual destination
 	uint e = rtr_alloc(17);
 	if(e==0) {
 		rt_error(RTE_ABORT);
@@ -192,31 +304,74 @@ void initRouter()
 			// starting from core-1 up to core-17
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
-	// then add another 4 generic keys
-	e = rtr_alloc(5);
+	// then add another keys
+	e = rtr_alloc(7);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
-		allRoute &= ~leader;
-		rtr_mc_set(e, MCPL_BCAST_CMD_KEY, 0xFFFFFFFF, allRoute);
-		rtr_mc_set(e+1, MCPL_BCAST_FILT_KEY, 0xFFFFFFFF, allRoute);
-		rtr_mc_set(e+2, MCPL_BCAST_INFO_KEY, 0xFFFFFFFF, allRoute);
-		rtr_mc_set(e+3, MCPL_INFO_TO_LEADER, 0xFFFFFFFF, leader);
-		rtr_mc_set(e+4, MCPL_FLAG_TO_LEADER, 0xFFFFFFFF, leader);
+		rtr_mc_set(e, MCPL_BCAST_INFO_KEY, 0xFFFFFFFF, workers); e++;
+		rtr_mc_set(e, MCPL_BCAST_CMD_FILT, 0xFFFFFFFF, allRoute); e++;
+		rtr_mc_set(e, MCPL_BCAST_CMD_DETECT, 0xFFFFFFFF, allRoute); e++;
+		rtr_mc_set(e, MCPL_BCAST_GET_WLOAD, 0xFFFFFFFF, workers); e++;
+		rtr_mc_set(e, MCPL_PING_REPLY, 0xFFFFFFFF, leader); e++;
+		rtr_mc_set(e, MCPL_FILT_DONE, 0xFFFFFFFF, leader); e++;
+		rtr_mc_set(e, MCPL_EDGE_DONE, 0xFFFFFFFF, leader); e++;
 	}
 }
 
 void initImage()
 {
-	imageInfoRetrieved = 0;
-	fullRImageRetrieved = 0;
-	fullGImageRetrieved = 0;
-	fullBImageRetrieved = 0;
-	imgRIn = (uchar *)IMG_R_BUFF0_BASE;
-	imgGIn = (uchar *)IMG_G_BUFF0_BASE;
-	imgBIn = (uchar *)IMG_B_BUFF0_BASE;
-	imgROut = (uchar *)IMG_R_BUFF1_BASE;
-	imgGOut = (uchar *)IMG_G_BUFF1_BASE;
-	imgBOut = (uchar *)IMG_B_BUFF1_BASE;
+	blkInfo->imageInfoRetrieved = 0;
+	blkInfo->fullRImageRetrieved = 0;
+	blkInfo->fullGImageRetrieved = 0;
+	blkInfo->fullBImageRetrieved = 0;
+	blkInfo->imgRIn = (uchar *)IMG_R_BUFF0_BASE;
+	blkInfo->imgGIn = (uchar *)IMG_G_BUFF0_BASE;
+	blkInfo->imgBIn = (uchar *)IMG_B_BUFF0_BASE;
+	blkInfo->imgROut = (uchar *)IMG_R_BUFF1_BASE;
+	blkInfo->imgGOut = (uchar *)IMG_G_BUFF1_BASE;
+	blkInfo->imgBOut = (uchar *)IMG_B_BUFF1_BASE;
 }
 
+
+// terminate gracefully
+void cleanUp()
+{
+	sark_xfree(sv->sysram_heap, blkInfo, ALLOC_LOCK);
+	// in this app, we "fix" the address of image, no need for xfree
+}
+
+/*_____________________________ Helper/debugging functions _________________________*/
+
+void printImgInfo(uint opType, uint None)
+{
+	io_printf(IO_BUF, "Image w = %d, h = %d, ", blkInfo->wImg, blkInfo->hImg);
+	if(blkInfo->isGrey==1)
+		io_printf(IO_BUF, "grascale, ");
+	else
+		io_printf(IO_BUF, "color, ");
+	switch(opType & 0xFF) {
+	case IMG_OP_SOBEL_NO_FILT:
+		io_printf(IO_BUF, "for sobel without filtering\n");
+		break;
+	case IMG_OP_SOBEL_WITH_FILT:
+		io_printf(IO_BUF, "for sobel with filtering\n");
+		break;
+	case IMG_OP_LAP_NO_FILT:
+		io_printf(IO_BUF, "for laplace without filtering\n");
+		break;
+	case IMG_OP_LAP_WITH_FILT:
+		io_printf(IO_BUF, "for laplace with filtering\n");
+		break;
+	}
+	io_printf(IO_BUF, "nodeBlockID = %d with maxBlock = %d\n",
+			  blkInfo->nodeBlockID, blkInfo->maxBlock);
+}
+
+void printWID(uint None, uint Neno)
+{
+	for(uint i=0; i<workers.tAvailable; i++)
+		io_printf(IO_BUF, "wID-%d is core-%d\n", i, workers.wID[i]);
+}
+
+/*____________________________________________________ Helper/debugging functions __*/

@@ -52,12 +52,27 @@ FILT_DENOM = 159
 IMG_R_BUFF0_BASE = 0x61000000
 IMG_G_BUFF0_BASE = 0x62000000
 IMG_B_BUFF0_BASE = 0x63000000
+
+
+#----------------- SpiNNaker stuffs --------------------
+CHIP_LIST_48 = [[0,0],[1,0],[2,0],[3,0],[4,0],\
+                [0,1],[1,1],[2,1],[3,1],[4,1],[5,1],\
+                [0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],\
+                [0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],\
+                      [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],\
+                            [2,5],[3,5],[4,5],[5,5],[6,5],[7,5],\
+                                  [3,6],[4,6],[5,6],[6,6],[7,6],\
+                                        [4,7],[5,7],[6,7],[7,7]]
+CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
+spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
+#spin5 = CHIP_LIST_48
+
 DEF_HOST = '192.168.240.253'
 DEF_SEND_PORT = 17893 #tidak bisa diganti dengan yang lain
 DEF_REPLY_PORT = 20000
 chipX = 0
 chipY = 0
-sdpImgRedPort = 1
+sdpImgRedPort = 1       # based on the aplx code
 sdpImgGreenPort = 2
 sdpImgBluePort = 3
 sdpImgConfigPort = 7
@@ -153,8 +168,19 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         #       3. test by downloading using ybug->sdump
         if self.img is None:
             return
+        # Experiment: use 4 chips:
+        for chip in range(4):
+            print "Sending img to chip <{},{}>...".format(spin3[chip][0], spin3[chip][1])
+            self.sendImg2Chip(chip, 4)
 
-        #first, prepare SDP container
+
+    def sendImg2Chip(self, chipIdx, nChip):
+        """
+        Originally copied from pbSendClicked()
+        Send image data to a specific chip, where chipIdx = 0,1,2,3 for spin3.
+        This function assume rmap0, gmap0, and bmap0 are ready!
+        """
+        #first, prepare SDP container and SDP receiver (acknowledge)
         udpSock = QtNetwork.QUdpSocket()
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -165,7 +191,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             return
 
         pad = struct.pack('2B',0,0)
-        da = (chipX << 8) + chipY
+        #da = (chipX << 8) + chipY
+        # for spin3:
+        da = (spin3[chipIdx][0] << 8) + spin3[chipIdx][1]
 
         #send image information through SDP_PORT_CONFIG
         dpcc = (sdpImgConfigPort << 5) + sdpCore
@@ -185,14 +213,14 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             opt = 4
         seq = (isGray << 8) + opt
         arg1 = (self.w << 16) + self.h
-        arg2 = 1    # will contain nodeBlockID and maxBlock, here we use only 1 chip
-        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)
+        arg2 = (chipIdx << 16) + nChip  # arg2.high = nodeBlockID, arg2.low = maxBlock
+
+        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)   # arg3 is not used
         sdp = pad + hdrc + scp
         udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
         #this time, no need for reply
 
         #try sending R-layer (in future, grey mechanism must be considered)
-        #TODO: in future, we might send accross several chips
         dpcr = (sdpImgRedPort << 5) + sdpCore
         dpcg = (sdpImgGreenPort << 5) + sdpCore
         dpcb = (sdpImgBluePort << 5) + sdpCore
@@ -200,7 +228,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         hdrg = struct.pack('4B2H',0x07,1,dpcg,255,da,0)
         hdrb = struct.pack('4B2H',0x07,1,dpcb,255,da,0)
 
-        #second, make a sequence
+        #second, make a sequence (transforming 2D-map0 into 1D array)
         rArray = list()
         for y in range(self.h):
             for x in range(self.w):

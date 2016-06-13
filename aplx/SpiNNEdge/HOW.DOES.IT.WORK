@@ -41,7 +41,11 @@ arg2.low = color layer (0=red, 1=green, 2=blue)
 // 1. we have to send reply with seq-number
 // 2. we need to tell spinnaker, what colour layer is being sent
 
-Tapi mungkin bisa diakali dengan membuat port terpisah untuk masing-masing layer
+Tapi mungkin bisa diakali dengan membuat port terpisah untuk masing-masing layer:
+#define SDP_PORT_R_IMG_DATA		1
+#define SDP_PORT_G_IMG_DATA		2
+#define SDP_PORT_B_IMG_DATA		3
+
 _______________________________________________ Sending images from host to spinnaker __
 
 __________________________________ How it starts _______________________________________
