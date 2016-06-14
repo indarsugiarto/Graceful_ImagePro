@@ -33,6 +33,7 @@ void hTimer(uint tick, uint Unused)
 		io_printf(IO_STD, "Chip-%d ready!\n", sv->p2p_addr);
 	}
 	else if(tick==4) {
+		/*
 		ushort x = (sv->p2p_addr >> 8) * 2;
 		ushort y = (sv->p2p_addr) & 0xFF;
 		sark_delay_us(1000*sv->p2p_addr);
@@ -45,6 +46,7 @@ void hTimer(uint tick, uint Unused)
 		blkInfo->imageInfoRetrieved = 1;
 		spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
 		computeWLoad(0,0);
+		*/
 	}
 	else {
 
@@ -54,7 +56,22 @@ void hTimer(uint tick, uint Unused)
 // TODO: initIPTag()
 void initIPTag()
 {
-
+	// only chip <0,0>
+	if(sv->p2p_addr==0) {
+		sdp_msg_t iptag;
+		iptag.flags = 0x07;	// no replay
+		iptag.tag = 0;		// internal
+		iptag.srce_addr = sv->p2p_addr;
+		iptag.srce_port = 0xE0 + myCoreID;	// use port-7
+		iptag.dest_addr = sv->p2p_addr;
+		iptag.dest_port = 0;				// send to "root"
+		iptag.cmd_rc = 26;
+		iptag.arg1 = (1 << 16) + SDP_TAG_REPLY;
+		iptag.arg2 = SDP_UDP_REPLY_PORT;
+		iptag.arg3 = SDP_HOST_IP;
+		iptag.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
+		spin1_send_sdp_msg(&iptag, 10);
+	}
 }
 
 /*
@@ -109,7 +126,7 @@ void hSDP(uint mBox, uint port)
 			spin1_schedule_callback(printImgInfo, msg->seq, 0, PRIORITY_PROCESSING);
 			// then inform workers to compute workload
 			spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
-			computeWLoad(0,0);
+			computeWLoad(0,0);	// only for leadAp
 		}
 		// TODO: don't forget to give a "kick" from python?
 		/*
@@ -246,6 +263,7 @@ void hSDP(uint mBox, uint port)
 
 void triggerProcessing(uint arg0, uint arg1)
 {
+	/*
 	if(blkInfo->opFilter==1) {
 		// broadcast command for filtering
 		nFiltJobDone = 0;
@@ -256,6 +274,14 @@ void triggerProcessing(uint arg0, uint arg1)
 		// broadcast command for detection
 		spin1_send_mc_packet(MCPL_BCAST_CMD_DETECT, 0, WITH_PAYLOAD);
 	}
+	*/
+
+	// debugging: see, how many chips are able to collect the images:
+	io_printf(IO_STD, "Image is completely received. Ready for processing!\n");
+	return;
+
+	// Let's skip filtering
+	spin1_send_mc_packet(MCPL_BCAST_CMD_DETECT, 0, WITH_PAYLOAD);
 }
 
 // afterFiltDone() will swap BUFF1_BASE to BUFF0_BASE
@@ -267,7 +293,7 @@ void afterFiltDone(uint arg0, uint arg1)
 // afterEdgeDone() send the result to host?
 void afterEdgeDone(uint arg0, uint arg1)
 {
-
+	io_printf(IO_STD, "Edge detection done!\n");
 }
 
 void initSDP()

@@ -11,6 +11,11 @@ void hDMADone(uint tid, uint tag)
 		case SDP_PORT_B_IMG_DATA: blkInfo->imgBIn += dLen; break;
 		}
 	}
+	if((tag & 0xFFFF) == DMA_FETCH_IMG_TAG) {
+		if((tag >> 16) == myCoreID) {
+			dmaImgFromSDRAMdone = 1;	// sor the image processing can continue
+		}
+	}
 }
 
 
@@ -83,6 +88,7 @@ void c_main()
 		workers.subBlockID = 0;	// leadAp has task ID-0
 		initSDP();
 		initRouter();
+		initIPTag();
 	}
 	else {
 		io_printf(IO_BUF, "SpiNNEdge running @ core-%d id-%d\n",

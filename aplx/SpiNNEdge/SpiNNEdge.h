@@ -4,27 +4,27 @@
 #include <spin1_api.h>
 
 /* 3x3 GX and GY Sobel mask.  Ref: www.cee.hw.ac.uk/hipr/html/sobel.html */
-static const uint GX[3][3] = {{-1,0,1},
+static const short GX[3][3] = {{-1,0,1},
 				 {-2,0,2},
 				 {-1,0,1}};
-static const uint GY[3][3] = {{1,2,1},
+static const short GY[3][3] = {{1,2,1},
 				 {0,0,0},
 				 {-1,-2,-1}};
 
 /* Laplace operator: 5x5 Laplace mask.  Ref: Myler Handbook p. 135 */
-static const uint LAP[5][5] = {{-1,-1,-1,-1,-1},
+static const short LAP[5][5] = {{-1,-1,-1,-1,-1},
 				  {-1,-1,-1,-1,-1},
 				  {-1,-1,24,-1,-1},
 				  {-1,-1,-1,-1,-1},
 				  {-1,-1,-1,-1,-1}};
 
 /* Gaussian filter. Ref:  en.wikipedia.org/wiki/Canny_edge_detector */
-static const uint FILT[5][5] = {{2,4,5,4,2},
+static const short FILT[5][5] = {{2,4,5,4,2},
 				   {4,9,12,9,4},
 				   {5,12,15,12,5},
 				   {4,9,12,9,4},
 				   {2,4,5,4,2}};
-static const uint FILT_DENOM = 159;
+static const short FILT_DENOM = 159;
 
 #define TIMER_TICK_PERIOD_US 	1000000
 #define PRIORITY_TIMER			3
@@ -35,6 +35,7 @@ static const uint FILT_DENOM = 159;
 
 #define SDP_TAG_REPLY			1
 #define SDP_UDP_REPLY_PORT		20000
+#define SDP_HOST_IP				0x02F0A8C0	// 192.168.240.2, dibalik!
 
 #define SDP_PORT_R_IMG_DATA		1
 #define SDP_PORT_G_IMG_DATA		2
@@ -83,7 +84,7 @@ typedef struct block_info {
 	uchar opFilter;			// 0==no filtering, 1==with filtering
 	ushort nodeBlockID;		// will be send by host
 	ushort maxBlock;		// will be send by host
-	// then pointers to the image
+	// then pointers to the image in SDRAM
 	uchar *imgRIn;
 	uchar *imgGIn;
 	uchar *imgBIn;
@@ -104,6 +105,13 @@ typedef struct w_info {
 	uchar tAvailable;		// total available workers, should be initialized to 1
 	ushort startLine;
 	ushort endLine;
+	// helper pointers
+	uchar *imgRIn;
+	uchar *imgGIn;
+	uchar *imgBIn;
+	uchar *imgROut;
+	uchar *imgGOut;
+	uchar *imgBOut;
 } w_info_t;
 
 
@@ -155,8 +163,10 @@ void computeWLoad(uint arg0, uint arg1);
 void afterFiltDone(uint arg0, uint arg1);
 void afterEdgeDone(uint arg0, uint arg1);
 
-// for copying image from sdp to sdram via dma
 static uchar *dtcmImgBuf = NULL;
+// for fetching/storing image
+volatile uchar dmaImgFromSDRAMdone;
+// also for copying image from sdp to sdram via dma
 volatile uchar dmaImg2SDRAMdone;
 ushort dLen;
 uchar whichRGB;	//0=R, 1=G, 2=B
