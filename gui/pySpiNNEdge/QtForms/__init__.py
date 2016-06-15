@@ -77,6 +77,7 @@ sdpImgGreenPort = 2
 sdpImgBluePort = 3
 sdpImgConfigPort = 7
 SDP_CMD_CONFIG = 1
+SDP_CMD_CONFIG_CHAIN = 11
 SDP_CMD_PROCESS = 2
 SDP_CMD_CLEAR = 3
 IMG_OP_SOBEL_NO_FILT	= 1	# will be carried in arg2.low
@@ -88,19 +89,51 @@ IMG_WITH_FILTERING		= 1
 IMG_SOBEL				= 0
 IMG_LAPLACE				= 1
 
+# Ideally, SpiNNaker should inform host, who leads the app (leadAp)
+# now, we assume that leadAp is in core 1
 sdpCore = 1
+pad = struct.pack('2B',0,0)
+
+SEND_METHOD = 1 # broadcast to all chips
+# SEND_METHOD = 0 # chip per chip
+
 
 class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     def __init__(self, def_image_dir = "./", parent=None):
         self.img_dir = def_image_dir
         self.img = None
+        self.continyu = True
         super(edgeGUI, self).__init__(parent)
         self.setupUi(self)
+
         self.connect(self.pbLoad, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbLoadClicked()"))
         self.connect(self.pbSend, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbSendClicked()"))
         self.connect(self.pbProcess, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbProcessClicked()"))
         self.connect(self.pbSave, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbSaveClicked()"))
         self.connect(self.pbClear, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbClearClicked()"))
+
+        self.RptSock = QtNetwork.QUdpSocket(self)
+        self.sdpSender = QtNetwork.QUdpSocket(self)
+        self.initRptSock(DEF_REPLY_PORT)
+
+    def initRptSock(self, port):
+        print "Try opening port-{} for receiving result...".format(port),
+        #result = self.sock.bind(QtNetwork.QHostAddress.LocalHost, DEF.RECV_PORT) --> problematik dengan penggunaan LocalHost
+        result = self.RptSock.bind(port)
+        if result is False:
+            print 'failed! Cannot open UDP port-{}'.format(port)
+        else:
+            print "done!"
+            self.RptSock.readyRead.connect(self.readRptSDP)
+
+    @QtCore.pyqtSlot()
+    def readRptSDP(self):
+        print "Got something..."
+        while self.RptSock.hasPendingDatagrams():
+            szData = self.RptSock.pendingDatagramSize()
+            datagram, host, port = self.RptSock.readDatagram(szData)
+            self.sdpUpdate.emit(datagram)
+            self.continyu = True
 
 
     @QtCore.pyqtSlot()
@@ -162,43 +195,42 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
     @QtCore.pyqtSlot()
     def pbSendClicked(self):
-        print "Send button clicked..."
         #TODO:  1. save the rgbmap to a dummy binary file -> use pbSaveClicked()
         #       2. send to all chips using ybug->sload
         #       3. test by downloading using ybug->sdump
         if self.img is None:
             return
-        # Experiment: use 4 chips:
-        for chip in range(4):
-            print "Sending img to chip <{},{}>...".format(spin3[chip][0], spin3[chip][1])
-            self.sendImg2Chip(chip, 4)
+
+        if SEND_METHOD==0:
+            # Experiment: use 4 chips:
+            for chip in range(4):
+                print "Sending img to chip <{},{}>...".format(spin3[chip][0], spin3[chip][1])
+                self.sendImgPerChip(chip, 4)
+        else:
+            # TODO: how to broadcast data via scp? See TODO.FLOOD_FILL-howTo --> maybe NO, we use our own SDP
+            # exampleConf for spin3:
+            exampleConf = dict()
+            exampleConf[0]=[0,0]
+            exampleConf[1]=[1,0]
+            exampleConf[2]=[0,1]
+            exampleConf[3]=[1,1]
+            self.sendBcastImg(exampleConf)
 
 
-    def sendImg2Chip(self, chipIdx, nChip):
+    def sendBcastImg(self, blkDict):
         """
-        Originally copied from pbSendClicked()
-        Send image data to a specific chip, where chipIdx = 0,1,2,3 for spin3.
-        This function assume rmap0, gmap0, and bmap0 are ready!
-        """
+        Let's try broadcasting image to all chips
         #first, prepare SDP container and SDP receiver (acknowledge)
-        udpSock = QtNetwork.QUdpSocket()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.bind( ('', DEF_REPLY_PORT) )     #'' sepertinya berarti HostAddress::Any
-        except OSError as msg:
-            print "%s" % msg
-            sock.close()
-            return
-
-        pad = struct.pack('2B',0,0)
-        #da = (chipX << 8) + chipY
-        # for spin3:
-        da = (spin3[chipIdx][0] << 8) + spin3[chipIdx][1]
-
         #send image information through SDP_PORT_CONFIG
-        dpcc = (sdpImgConfigPort << 5) + sdpCore
-        hdrc = struct.pack('4B2H',0x07,1,dpcc,255,da,0)
-        cmd = SDP_CMD_CONFIG
+        #the data segment contains list of block-id with format:
+        #[x,y,blockID1],[x,y,blockID2],etc
+        #in this case, arg2 contains nodeBlockID for chip<0,0> and the maxBlock
+        #arg3 is not used as well
+        """
+        print "Broadcasting configuration...",
+        dpcc = (sdpImgConfigPort << 5) + sdpCore    # TODO: in future, let aplx report leadAp first!
+        hdrc = struct.pack('4B2H',0x07,1,dpcc,255,0,0)
+        cmd = SDP_CMD_CONFIG_CHAIN
         if self.isGray is True:
             isGray = 1
         else:
@@ -213,14 +245,72 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             opt = 4
         seq = (isGray << 8) + opt
         arg1 = (self.w << 16) + self.h
+
+        # find, what is the id of chip<0,0>
+        chip0ID = 0
+        ba = bytearray()
+        for id in blkDict:
+            if (blkDict[id][0] == blkDict[id][1]) and (blkDict[id][0] == 0):
+                chip0ID = id
+            else:
+                # fill in the data segment
+                blkID = struct.pack("3B",blkDict[id][0], blkDict[id][1],id)
+                ba = ba + blkID
+        arg2 = (chip0ID << 16) + len(blkDict)  # arg2.high = nodeBlockID, arg2.low = maxBlock
+        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)   # arg3 is not used
+
+        sdp = pad + hdrc + scp + ba
+        udpSock = QtNetwork.QUdpSocket()
+        udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+
+        print "done!\nBroadcasting image...",
+
+        # then start the broadcast by sending image to chip<0,0>
+        self.sendImg(0, 0)
+        print "done!\n"
+
+    def sendImgPerChip(self, chipIdx, nChip):
+        """
+        Send image data to a specific chip, where chipIdx = 0,1,2,3 for spin3.
+        This function assume rmap0, gmap0, and bmap0 are ready!
+        """
+        # first, send image configuration
+        # for spin3:
+        x = spin3[chipIdx][0]
+        y = spin3[chipIdx][1]
+        da = (x << 8) + y
+
+        # send image information through SDP_PORT_CONFIG
+        dpcc = (sdpImgConfigPort << 5) + sdpCore
+        hdrc = struct.pack('4B2H', 0x07, 1, dpcc, 255, da, 0)
+        cmd = SDP_CMD_CONFIG
+        if self.isGray is True:
+            isGray = 1
+        else:
+            isGray = 0
+        if self.cbMode.currentIndex() == 0 and self.cbFilter.isChecked() is False:
+            opt = 1
+        elif self.cbMode.currentIndex() == 0 and self.cbFilter.isChecked() is True:
+            opt = 2
+        elif self.cbMode.currentIndex() == 1 and self.cbFilter.isChecked() is False:
+            opt = 3
+        else:
+            opt = 4
+        seq = (isGray << 8) + opt
+        arg1 = (self.w << 16) + self.h
         arg2 = (chipIdx << 16) + nChip  # arg2.high = nodeBlockID, arg2.low = maxBlock
 
         scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)   # arg3 is not used
         sdp = pad + hdrc + scp
-        udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-        #this time, no need for reply
+        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        # this time, no need for reply
 
-        #try sending R-layer (in future, grey mechanism must be considered)
+        self.sendImg(x, y)
+
+    def sendImg(self, chipX, chipY):
+        # Will use self.sdpSender as the socket
+        # try sending R-layer (in future, grey mechanism must be considered)
+        da = (chipX << 8) + chipY
         dpcr = (sdpImgRedPort << 5) + sdpCore
         dpcg = (sdpImgGreenPort << 5) + sdpCore
         dpcb = (sdpImgBluePort << 5) + sdpCore
@@ -228,13 +318,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         hdrg = struct.pack('4B2H',0x07,1,dpcg,255,da,0)
         hdrb = struct.pack('4B2H',0x07,1,dpcb,255,da,0)
 
-        #second, make a sequence (transforming 2D-map0 into 1D array)
+        # second, make a sequence (transforming 2D-map0 into 1D array)
         rArray = list()
         for y in range(self.h):
             for x in range(self.w):
                 rArray.append(self.rmap0[y][x])
 
-        #third, iterate until all elements are sent
+        # third, iterate until all elements are sent
         remaining = len(rArray)
         stepping = 16+256   # initially, it's size is SCP+data_part
         stopping = stepping
@@ -243,10 +333,15 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             chunk = rArray[starting:stopping]
             ba = bytearray(chunk)
             sdp = pad + hdrr + ba
-            udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+            self.continyu = False
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
-            #then waiting for a reply
-            reply = sock.recv(1024)
+            # then waiting for a reply
+            # reply = sock.recv(1024)
+            reply = 0   # self.continyu is altered in readRptSDP()
+            while self.continyu==False:
+                reply += reply
+
             remaining -= stepping
             starting = stopping
 
@@ -254,11 +349,12 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 stepping = remaining
             stopping += stepping
 
-        #fourth, send an empty data to signify end of image transfer
+        # fourth, send an empty data to signify end of image transfer
         sdp = pad + hdrr
-        udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
-        #check if the image is gray, if not, then send the green and blue layers
+        # check if the image is gray, if not, then send the green and blue layers
+        # NOTE: kalau diselang-seling G dengan B, menyebabkan aplx RTE
         if self.isGray is False:
             gArray = list()
             bArray = list()
@@ -267,7 +363,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                     gArray.append(self.gmap0[y][x])
                     bArray.append(self.bmap0[y][x])
 
-            #iterate until all elements are sent
+            # G-channel: iterate until all elements are sent
             remaining = len(gArray) #which is equal to len(bArray) as well
             stepping = 16+256   # initially, it's size is SCP+data_part
             stopping = stepping
@@ -277,18 +373,15 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 chunk = gArray[starting:stopping]
                 ba = bytearray(chunk)
                 sdp = pad + hdrg + ba
-                udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-                #then waiting for a reply from green channel before go to blue one
-                reply = sock.recv(1024)
+                self.continyu = False
+                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+                # then waiting for a reply from green channel before go to blue one
+                # reply = sock.recv(1024)
+                reply = 0   # self.continyu is altered in readRptSDP()
+                while self.continyu==False:
+                    reply += reply
 
-                chunk = bArray[starting:stopping]
-                ba = bytearray(chunk)
-                sdp = pad + hdrb + ba
-                udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-                #again, wait for a reply from blue channel
-                reply = sock.recv(1024)
-
-                #repeat for the next chunk
+                # repeat for the next chunk
                 remaining -= stepping
                 starting = stopping
 
@@ -296,17 +389,45 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                     stepping = remaining
                 stopping += stepping
 
-            #finally, send an empty data to signify end of image transfer
+            # finally, send an empty data to signify end of image transfer
             sdp = pad + hdrg
-            udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-            sdp = pad + hdrb
-            udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
-        #close the receiving socket
-        sock.close()
+            # B-channel: iterate until all elements are sent
+            remaining = len(bArray) #which is equal to len(bArray) as well
+            stepping = 16+256   # initially, it's size is SCP+data_part
+            stopping = stepping
+            starting = 0
+            while remaining > 0:
+
+                chunk = bArray[starting:stopping]
+                ba = bytearray(chunk)
+                sdp = pad + hdrb + ba
+                self.continyu = False
+                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+                # again, wait for a reply from blue channel
+                # reply = sock.recv(1024)
+                reply = 0   # self.continyu is altered in readRptSDP()
+                while self.continyu == False:
+                    reply += reply
+
+                # repeat for the next chunk
+                remaining -= stepping
+                starting = stopping
+
+                if remaining < stepping:
+                    stepping = remaining
+                stopping += stepping
+
+            # finally, send an empty data to signify end of image transfer
+            sdp = pad + hdrb
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
     @QtCore.pyqtSlot()
     def pbProcessClicked(self):
+
+        if self.img is None:
+            return
 
         if self.cbMode.currentIndex() == 0:
             self.newImg = self.doSobel()
@@ -355,6 +476,12 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     def pbClearClicked(self):
         if self.img is None:
             return
+
+        # clear
+        self.img = None
+        self.scene.clear()
+
+
         #TODO: send notification to spinnaker that it is "clear"
         dc = sdpCore
         dp = sdpImgConfigPort

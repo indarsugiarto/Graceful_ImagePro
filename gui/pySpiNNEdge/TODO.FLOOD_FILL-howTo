@@ -1,0 +1,119 @@
+Mekanisme sload:
+akan memanggil fungsi write_file ($addr, $file)
+
+Function write_file() akan memanggil fungsi write($base, $buf)
+$base sepertinya alamat sdram di spinnaker
+	-> akan di-increment dengan $size (ukuran data yang sedang dibaca,
+		mekanisme baca file adalah iteratif, higga EOF)
+
+Function write()
+
+----- Salah, karena sload hanya utk chip tertentu yang sedang aktif (pakai sp) ----
+
+Sepertinya yang benar pakai perintah data_load(file, region, addr)
+Pertama, region akan di-parse untuk membuat daftar chip
+cmd_data_load kemudian akan memanggil flood_fill ($buf, $region, 0, 0, 0, base => $addr, addr => [])
+
+Format: flood_fill($buf, $region, $mask, $app_id, $app_flags, %opts);
+
+Berarti, flood_fill diatas:
+	mask = 0
+	app_id = 0
+	app_flags = 0
+
+$buf adalah buffer dari data yang dibaca dari file (max 1024*1024)
+$region adalah hasil dari parse_region($region, $chip_x, $chip_y)
+
+Perintah flood_fill ($buf, $region, $mask, $app_id, $app_flags, %opts)
+sepertinya jika $base tidak diberikan saat memanggil flood_fill,
+flood_fill akan mengasumsikan alamat 0x67800000
+
+
+kemudian data dipecah menjadi blok-blok kecil berukuran 256
+
+Proses:
+1. Send FFS packet
+2. Loop: send FFD data blocks
+3. Send FFE packet
+
+
+Perincian:
+------------
+1. Tentang sending FFS packet:
+    $key = ($NN_CMD_FFS << 24) + ($id << 16) + ($blocks << 8) + 0;
+    $data = $region;
+
+	dimana: 
+		$NN_CMD_FFS = 6, 
+		$blocks adalah banyaknya block/chunk
+		($sfwd, $srty) = (0x3f, 0x18);	# Forward, retry parameters
+		$id = $self->next_id ();		# ID for FF packets
+		$fr = ($sfwd << 8) + $srty;	# Pack up fwd, rty
+		$sfr = (1 << 31) + $fr;		# Bit 31 says allocate ID on Spin
+
+	kemudian panggil:  $self->nnp ($key, $data, $sfr, %opts);
+
+Tentang perintah nnp($self, $arg1, $arg2, $arg3, %opts)
+
+    $self->scp_cmd ($CMD_NNP, //$CMD_NNP = 20
+		    arg1 => $arg1,
+		    arg2 => $arg2,
+		    arg3 => $arg3,
+		    %opts);
+
+
+
+2. Tentang sending FFD data blocks (in loop):
+kemudian dilakukan loop/iterasi yang akan kirim data dengan scp_cmd:
+	cmd_rc = $CMD_FFD = 23
+	arg1 = ($sfwd << 24) + ($srty << 16) + (0 << 8) + $id
+	arg2 = (0 << 24) + ($block << 16) + ($size << 8) + 0
+	arg3 => $base
+	data => $data
+
+	$data adalah blok berukuran 256 (diekstrak dari $buf)
+	$base adalah alamat memory tujuan, yang akan diincrement setiap kali selesai kirim blok
+	untuk arg1:
+		$sfwd adalah 0x3f
+		$srty adalah 0x18
+		$id is ID for FF packets yang dikirim via mekanisme NN
+			kalau lihat di next_id(), $id ini bernilai genap (karena dikali 2)
+	untuk arg2:
+		$block adalah nomer iterasi
+		$size = ($len / 4) - 1
+		sedangkan $len = length of $data (bisa 256 atau lebih kecil)
+
+
+3. Tentang sending FFE packet:
+    $key = ($NN_CMD_FFE << 24) + (0 << 16) + (0 << 8) + $id; # const
+    $data = ($app_id << 24) + ($app_flags << 18) + ($mask & 0x3ffff);
+
+	dimana:
+		$NN_CMD_FFE = 15
+		$app_id = 0		// ndak tahu kenapa
+		$app_flags = 0	// ndak tahu kenapa
+		$mask = 0		// ndak tahu kenapa
+    $self->nnp ($key, $data, $fr, %opts);
+
+
+
+-------------- Tentang region --------------
+misalkan diberikan data @2,3 untuk format @X,Y, maka 
+
+	y = 3, dan x = 2
+	my $m = ($y & 3) * 4 + ($x & 3);
+
+	return (($x & 0xfc) << 24) +
+	       (($y & 0xfc) << 16) +
+	       (3 << 16) +
+	       (1 << $m);
+    }
+
+Sedang untuk formal all, maka
+hasilnya adalah 0x0000ffff --> dah aku coba juga pakai ybug
+
+
+-------------- Tentang scp_cmd ----------------
+Sepertinya dikirim ke <0,0,0>
+
+

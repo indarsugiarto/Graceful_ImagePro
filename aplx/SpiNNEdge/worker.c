@@ -49,13 +49,13 @@ void computeWLoad(uint arg0, uint arg1)
 	workers.startLine = sp[workers.subBlockID];
 	workers.endLine = ep[workers.subBlockID];
 
-	// then align the internal pointer accordingly
-	workers.imgRIn = blkInfo->imgRIn + w;
-	workers.imgGIn = blkInfo->imgGIn + w;
-	workers.imgBIn = blkInfo->imgBIn + w;
-	workers.imgROut = blkInfo->imgROut + w;
-	workers.imgGOut = blkInfo->imgGOut + w;
-	workers.imgBOut = blkInfo->imgBOut + w;
+	// then align the internal/worker pointer accordingly
+	workers.imgRIn = blkInfo->imgRIn + w*workers.startLine;
+	workers.imgGIn = blkInfo->imgGIn + w*workers.startLine;
+	workers.imgBIn = blkInfo->imgBIn + w*workers.startLine;
+	workers.imgROut = blkInfo->imgROut + w*workers.startLine;
+	workers.imgGOut = blkInfo->imgGOut + w*workers.startLine;
+	workers.imgBOut = blkInfo->imgBOut + w*workers.startLine;
 
 	// let's print the resulting workload
 	io_printf(IO_BUF, "sp = %d, ep = %d\n", workers.startLine, workers.endLine);
@@ -68,6 +68,7 @@ void imgFiltering(uint arg0, uint arg1)
 
 void imgDetection(uint arg0, uint arg1)
 {
+	io_printf(IO_BUF, "Begin edge detection...\n");
 	ushort szMask = blkInfo->opType == IMG_SOBEL ? 3:5;
 	ushort offset = blkInfo->opType == IMG_SOBEL ? 1:2;
 	ushort w = blkInfo->wImg;
@@ -81,6 +82,7 @@ void imgDetection(uint arg0, uint arg1)
 	uchar *resImgBuf;
 
 	uchar rgbCntr;
+	uint dmaCheck;
 
 	// how many lines this worker has?
 	n = workers.endLine - workers.startLine + 1;
@@ -111,8 +113,16 @@ void imgDetection(uint arg0, uint arg1)
 			sdramImgIn -= offset*w;
 
 			dmaImgFromSDRAMdone = 0;
-			spin1_dma_transfer((myCoreID << 16) +  DMA_FETCH_IMG_TAG, (void *)sdramImgIn,
-							   (void *)dtcmImgBuf, DMA_READ, cntPixel);
+			do {
+				dmaCheck = spin1_dma_transfer((myCoreID << 16) +  DMA_FETCH_IMG_TAG, (void *)sdramImgIn,
+								   (void *)dtcmImgBuf, DMA_READ, cntPixel);
+				if(dmaCheck==0) {
+					io_printf(IO_BUF, "DMA full! Retry...\n");
+				}
+			} while (dmaCheck==0);
+			//if(dmaCheck==0) {
+			//	io_printf(IO_BUF, "DMA full!\n");
+			//}
 			while(dmaImgFromSDRAMdone==0) {
 			}
 
@@ -169,5 +179,6 @@ void imgDetection(uint arg0, uint arg1)
 	sark_free(resImgBuf);
 	sark_free(dtcmImgBuf);
 	// at the end, send MCPL_EDGE_DONE
+	io_printf(IO_BUF, "Done edge detection!\n");
 	spin1_send_mc_packet(MCPL_EDGE_DONE, 0, WITH_PAYLOAD);
 }

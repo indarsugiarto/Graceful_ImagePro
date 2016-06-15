@@ -6,14 +6,16 @@ void hDMADone(uint tid, uint tag)
 	if(tag==DMA_STORE_IMG_TAG) {
 		dmaImg2SDRAMdone = 1;
 		switch(whichRGB) {
-		case SDP_PORT_R_IMG_DATA:	blkInfo->imgRIn += dLen; break;
+		case SDP_PORT_R_IMG_DATA: blkInfo->imgRIn += dLen; break;
 		case SDP_PORT_G_IMG_DATA: blkInfo->imgGIn += dLen; break;
 		case SDP_PORT_B_IMG_DATA: blkInfo->imgBIn += dLen; break;
 		}
 	}
 	if((tag & 0xFFFF) == DMA_FETCH_IMG_TAG) {
+		io_printf(IO_BUF, "dma tag = 0x%x\n", tag);
 		if((tag >> 16) == myCoreID) {
 			dmaImgFromSDRAMdone = 1;	// sor the image processing can continue
+			io_printf(IO_BUF, "for me!\n");
 		}
 	}
 }
@@ -67,10 +69,7 @@ void c_main()
 
 	// only leadAp has access to dma and sdp
 	if(leadAp) {
-		ushort x = (sv->p2p_addr >> 8) * 2;
-		ushort y = (sv->p2p_addr) & 0xFF;
-		io_printf(IO_STD, "SpiNNEdge running @ core-%d in chip-%d\n",
-				  sark_core_id(), x+y);
+		io_printf(IO_STD, "[SpiNNEdge] leadAp running @ core-%d\n", sark_core_id());
 		io_printf(IO_BUF, "Will allocate %d in sysram\n", sizeof(block_info_t));
 		// prepare chip-level image block information
 		blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
@@ -86,6 +85,7 @@ void c_main()
 		workers.wID[0] = myCoreID;
 		workers.tAvailable = 1;
 		workers.subBlockID = 0;	// leadAp has task ID-0
+		chips = NULL;
 		initSDP();
 		initRouter();
 		initIPTag();

@@ -42,6 +42,7 @@ static const short FILT_DENOM = 159;
 #define SDP_PORT_B_IMG_DATA		3
 #define SDP_PORT_CONFIG			7
 #define SDP_CMD_CONFIG			1	// will be sent via SDP_PORT_CONFIG
+#define SDP_CMD_CONFIG_CHAIN	11
 #define SDP_CMD_PROCESS			2	// will be sent via SDP_PORT_CONFIG
 #define SDP_CMD_CLEAR			3	// will be sent via SDP_PORT_CONFIG
 #define SDP_CMD_HOST_SEND_IMG	0x1234
@@ -114,6 +115,11 @@ typedef struct w_info {
 	uchar *imgBOut;
 } w_info_t;
 
+typedef struct chain {
+	ushort x;
+	ushort y;
+	ushort id;
+} chain_t;
 
 /* Due to filtering mechanism, the address of image might be changed.
  * Scenario:
@@ -141,6 +147,8 @@ w_info_t workers;
 block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
 uchar nFiltJobDone;				// will be used to count how many workers have
 uchar nEdgeJobDone;				// finished their job in either filtering or edge detection
+chain_t *chips;					// list of chips in a chain for image loading
+uchar chainMode;
 
 sdp_msg_t *reportMsg;
 
@@ -174,6 +182,7 @@ uchar whichRGB;	//0=R, 1=G, 2=B
 // helper/debugging functions
 void printImgInfo(uint opType, uint None);
 void printWID(uint None, uint Neno);
+void myDelay();
 
 #endif // SPINNEDGE_H
 
