@@ -2,22 +2,44 @@
 #include "SpiNNEdge.h"
 #include <stdlib.h>	// need for abs()
 
+void printWLoad()
+{
+	// io_printf(IO_BUF, "wID = %d\n", workers.wID[myCoreID]);
+	io_printf(IO_BUF, "subBlockID = %d\n", workers.subBlockID);
+	io_printf(IO_BUF, "tAvailable = %d\n", workers.tAvailable);
+	io_printf(IO_BUF, "blkStart = %d\n", workers.blkStart);
+	io_printf(IO_BUF, "blkEnd = %d\n", workers.blkEnd);
+	io_printf(IO_BUF, "nLinesPerBlock = %d\n", workers.nLinesPerBlock);
+	io_printf(IO_BUF, "startLine = %d\n", workers.startLine);
+	io_printf(IO_BUF, "endLine = %d\n", workers.endLine);
+	io_printf(IO_BUF, "wImg = %d\n", workers.wImg);
+	io_printf(IO_BUF, "hImg = %d\n", workers.hImg);
+	io_printf(IO_BUF, "imgRIn @ 0x%x\n", workers.imgRIn);
+	io_printf(IO_BUF, "imgGIn @ 0x%x\n", workers.imgGIn);
+	io_printf(IO_BUF, "imgBIn @ 0x%x\n", workers.imgBIn);
+	io_printf(IO_BUF, "imgROut @ 0x%x\n", workers.imgROut);
+	io_printf(IO_BUF, "imgGOut @ 0x%x\n", workers.imgGOut);
+	io_printf(IO_BUF, "imgBOut @ 0x%x\n", workers.imgBOut);
+}
+
 // compute individual working block
 void computeWLoad(uint arg0, uint arg1)
 {
-	ushort w = blkInfo->wImg;
-	ushort h = blkInfo->hImg;
+	ushort w = blkInfo->wImg; workers.wImg = w;
+	ushort h = blkInfo->hImg; workers.hImg = h;
 
 	// block-wide
-	ushort nLinesPerBlock = h / blkInfo->maxBlock;
+	workers.nLinesPerBlock = h / blkInfo->maxBlock;
 	ushort nRemInBlock = h % blkInfo->maxBlock;
-	ushort blkStart = blkInfo->nodeBlockID * nLinesPerBlock;
+	workers.blkStart = blkInfo->nodeBlockID * workers.nLinesPerBlock;
 
 	// core-wide
 	if(blkInfo->nodeBlockID==blkInfo->maxBlock-1)
-		nLinesPerBlock += nRemInBlock;
-	ushort nLinesPerCore = nLinesPerBlock / workers.tAvailable;
-	ushort nRemInCore = nLinesPerBlock % workers.tAvailable;
+		workers.nLinesPerBlock += nRemInBlock;
+	workers.blkEnd = workers.blkStart + workers.nLinesPerBlock - 1;
+
+	ushort nLinesPerCore = workers.nLinesPerBlock / workers.tAvailable;
+	ushort nRemInCore = workers.nLinesPerBlock % workers.tAvailable;
 	ushort wl[17], sp[17], ep[17];	// assuming 17 cores at max
 	ushort i,j;
 
@@ -32,7 +54,7 @@ void computeWLoad(uint arg0, uint arg1)
 
 	// initialize starting point with respect to blkStart
 	for(i=0; i<17; i++)
-		sp[i] = blkStart;
+		sp[i] = workers.blkStart;
 
 	for(i=0; i<workers.tAvailable; i++) {
 		wl[i] = nLinesPerCore;
@@ -56,9 +78,11 @@ void computeWLoad(uint arg0, uint arg1)
 	workers.imgROut = blkInfo->imgROut + w*workers.startLine;
 	workers.imgGOut = blkInfo->imgGOut + w*workers.startLine;
 	workers.imgBOut = blkInfo->imgBOut + w*workers.startLine;
+	// so, each work has different value of those workers.img*
 
 	// let's print the resulting workload
 	io_printf(IO_BUF, "sp = %d, ep = %d\n", workers.startLine, workers.endLine);
+	printWLoad();
 }
 
 void imgFiltering(uint arg0, uint arg1)
@@ -165,6 +189,7 @@ void imgDetection(uint arg0, uint arg1)
 				if(sumXY<0) sumXY = 0;
 				// resImgBuf is just one line and it doesn't matter, where it is!
 				*(resImgBuf + c) = 255 - (uchar)(sumXY);
+				// TODO: what if dma full?
 				spin1_dma_transfer((myCoreID << 16) + DMA_STORE_IMG_TAG, (void *)sdramImgOut,
 								   (void *)resImgBuf, DMA_WRITE, w);
 			} // end for c-loop

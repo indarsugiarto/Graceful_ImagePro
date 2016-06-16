@@ -3,7 +3,8 @@
 
 void hDMADone(uint tid, uint tag)
 {
-	if(tag==DMA_STORE_IMG_TAG) {
+
+	if(tag == DMA_STORE_IMG_TAG) {
 		dmaImg2SDRAMdone = 1;
 		switch(whichRGB) {
 		case SDP_PORT_R_IMG_DATA: blkInfo->imgRIn += dLen; break;
@@ -11,15 +12,20 @@ void hDMADone(uint tid, uint tag)
 		case SDP_PORT_B_IMG_DATA: blkInfo->imgBIn += dLen; break;
 		}
 	}
-	if((tag & 0xFFFF) == DMA_FETCH_IMG_TAG) {
-		io_printf(IO_BUF, "dma tag = 0x%x\n", tag);
+	else if((tag & 0xFFFF) == DMA_FETCH_IMG_TAG) {
+		//io_printf(IO_BUF, "dma tag = 0x%x\n", tag);
 		if((tag >> 16) == myCoreID) {
 			dmaImgFromSDRAMdone = 1;	// sor the image processing can continue
-			io_printf(IO_BUF, "for me!\n");
+			//io_printf(IO_BUF, "for me!\n");
 		}
 	}
 }
 
+void notifyHostDone(uint arg0, uint arg1)
+{
+	reportMsg.length = sizeof(sdp_hdr_t);
+	spin1_send_sdp_msg(&reportMsg, 10);
+}
 
 void hMCPL(uint key, uint payload)
 {
@@ -59,23 +65,38 @@ void hMCPL(uint key, uint payload)
 		if(nEdgeJobDone==workers.tAvailable)
 			spin1_schedule_callback(afterEdgeDone, 0, 0, PRIORITY_PROCESSING);
 	}
+	else if(key==MCPL_BLOCK_DONE) {
+		nBlockDone++;
+		if(nBlockDone==blkInfo->maxBlock)
+			spin1_schedule_callback(notifyHostDone, 0, 0, PRIORITY_PROCESSING);
+	}
 }
 
 void c_main()
 {
 	myCoreID = sark_core_id();
-	spin1_callback_on(MCPL_PACKET_RECEIVED, hMCPL, PRIORITY_MCPL);	
+	spin1_callback_on(MCPL_PACKET_RECEIVED, hMCPL, PRIORITY_MCPL);
 	spin1_callback_on(DMA_TRANSFER_DONE, hDMADone, PRIORITY_DMA);
 
 	// only leadAp has access to dma and sdp
 	if(leadAp) {
+
+		// the danger of sdp_msg_t * without initialization is...
+		/*
+		reportMsg = sark_alloc(1, sizeof(sdp_msg_t));
+		resultMsg = sark_alloc(1, sizeof(sdp_msg_t));
+		io_printf(IO_BUF, "reportMsg @ 0x%x, resultMsg @ 0x%x\n", reportMsg, resultMsg);
+		*/
+
 		io_printf(IO_STD, "[SpiNNEdge] leadAp running @ core-%d\n", sark_core_id());
 		io_printf(IO_BUF, "Will allocate %d in sysram\n", sizeof(block_info_t));
 		// prepare chip-level image block information
-		blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
-							  sark_app_id(), ALLOC_LOCK);
+		//blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
+		//					  sark_app_id(), ALLOC_LOCK);
+		blkInfo = sark_xalloc(sv->sdram_heap, sizeof(block_info_t),
+									  sark_app_id(), ALLOC_LOCK);
 		if(blkInfo==NULL) {
-			io_printf(IO_BUF, "Sysram alloc error!\n");
+			io_printf(IO_BUF, "blkInfo alloc error!\n");
 			rt_error(RTE_ABORT);
 		}
 		else

@@ -36,6 +36,8 @@ static const short FILT_DENOM = 159;
 #define SDP_TAG_REPLY			1
 #define SDP_UDP_REPLY_PORT		20000
 #define SDP_HOST_IP				0x02F0A8C0	// 192.168.240.2, dibalik!
+#define SDP_TAG_RESULT			2
+#define SDP_UDP_RESULT_PORT		20001
 
 #define SDP_PORT_R_IMG_DATA		1
 #define SDP_PORT_G_IMG_DATA		2
@@ -71,7 +73,8 @@ static const short FILT_DENOM = 159;
 #define MCPL_PING_REPLY			0x1ead0001
 #define MCPL_FILT_DONE			0x1ead0002	// worker send signal to leader
 #define MCPL_EDGE_DONE			0x1ead0003
-//key with values
+//special key (with values)
+#define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
 
 //some definitions
 #define FLAG_FILTERING_DONE		0xf117
@@ -104,9 +107,14 @@ typedef struct w_info {
 	uchar wID[17];			// coreID of all workers (max is 17), hold by leadAp
 	uchar subBlockID;		// this will be hold individually by each worker
 	uchar tAvailable;		// total available workers, should be initialized to 1
+	ushort blkStart;
+	ushort blkEnd;
+	ushort nLinesPerBlock;
 	ushort startLine;
 	ushort endLine;
 	// helper pointers
+	ushort wImg;		// just a copy of block_info_t.wImg
+	ushort hImg;		// just a copy of block_info_t.hImg
 	uchar *imgRIn;
 	uchar *imgGIn;
 	uchar *imgBIn;
@@ -147,10 +155,12 @@ w_info_t workers;
 block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
 uchar nFiltJobDone;				// will be used to count how many workers have
 uchar nEdgeJobDone;				// finished their job in either filtering or edge detection
+uchar nBlockDone;
 chain_t *chips;					// list of chips in a chain for image loading
 uchar chainMode;
 
-sdp_msg_t *reportMsg;
+static sdp_msg_t reportMsg;
+static sdp_msg_t resultMsg;
 
 // forward declaration
 void triggerProcessing(uint arg0, uint arg1);	// after filterning, leadAp needs to copy
@@ -170,6 +180,8 @@ void cleanUp();
 void computeWLoad(uint arg0, uint arg1);
 void afterFiltDone(uint arg0, uint arg1);
 void afterEdgeDone(uint arg0, uint arg1);
+void sendResult(uint arg0, uint arg1);
+void notifyHostDone(uint arg0, uint arg1);	// inform host that all results have been sent
 
 static uchar *dtcmImgBuf = NULL;
 // for fetching/storing image
@@ -183,6 +195,7 @@ uchar whichRGB;	//0=R, 1=G, 2=B
 void printImgInfo(uint opType, uint None);
 void printWID(uint None, uint Neno);
 void myDelay();
+void sendReply(uint arg0, uint arg1);
 
 #endif // SPINNEDGE_H
 
