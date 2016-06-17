@@ -283,8 +283,8 @@ void hSDP(uint mBox, uint port)
 			// just debugging:
 			spin1_schedule_callback(printImgInfo, msg->seq, 0, PRIORITY_PROCESSING);
 			// then inform workers to compute workload
-			spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
-			spin1_schedule_callback(computeWLoad,0,0, PRIORITY_PROCESSING);	// only for leadAp
+			spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, msg->arg3, WITH_PAYLOAD);
+			spin1_schedule_callback(computeWLoad,msg->arg3,0, PRIORITY_PROCESSING);	// only for leadAp
 
 		}
 		// TODO: don't forget to give a "kick" from python?
@@ -388,7 +388,7 @@ void sendResult(uint arg0, uint arg1)
 		if(rgb > 0 && blkInfo->isGrey==1) break;
 		resultMsg.arg2 = rgb;
 
-		io_printf(IO_STD, "[Sending] result channel-%d...\n", rgb);
+		// io_printf(IO_STD, "[Sending] result channel-%d...\n", rgb);
 
 		l = 0;	// for the imgXOut pointer
 		for(ushort lines=workers.blkStart; lines<=workers.blkEnd; lines++) {
@@ -428,8 +428,8 @@ void sendResult(uint arg0, uint arg1)
 
 				// send via sdp
 				spin1_send_sdp_msg(&resultMsg, 10);
-				io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
-						  lines, c+1, resultMsg.tag);
+				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
+				//		  lines, c+1, resultMsg.tag);
 
 				spin1_delay_us((1 + blkInfo->nodeBlockID)*1000);
 

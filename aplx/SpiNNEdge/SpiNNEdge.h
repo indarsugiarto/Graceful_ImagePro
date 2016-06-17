@@ -192,7 +192,7 @@ void hSDP(uint mBox, uint port);
 void imgFiltering(uint arg0, uint arg1);
 void imgProcessing(uint arg0, uint arg1);
 void cleanUp();
-void computeWLoad(uint arg0, uint arg1);
+void computeWLoad(uint withReport, uint arg1);
 void afterFiltDone(uint arg0, uint arg1);
 void afterEdgeDone(uint arg0, uint arg1);
 void sendResult(uint arg0, uint arg1);

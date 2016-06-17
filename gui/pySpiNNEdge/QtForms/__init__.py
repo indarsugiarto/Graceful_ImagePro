@@ -105,6 +105,8 @@ pad = struct.pack('2B',0,0)
 SEND_METHOD = 1 # broadcast to all chips
 # SEND_METHOD = 0 # chip per chip
 
+ASK_BLOCK_REPORT = 0
+# ASK_BLOCK_REPORT = 1  # ask cores to report their working block region
 
 class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     # The following signals MUST defined here, NOT in the init()
@@ -276,9 +278,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         fileB.close()
 
     def processResult(self):
-        print "Result is received completely!"
+        # print "Result is received completely!"
         self.saveResult()
-        print "Total pixel = ", self.tResult
+        # print "Total pixel = ", self.tResult
         # return
         # How to render?
         imgResult = QtGui.QImage(self.w, self.h, QtGui.QImage.Format_RGB32)
@@ -446,9 +448,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         #the data segment contains list of block-id with format:
         #[x,y,blockID1],[x,y,blockID2],etc
         #in this case, arg2 contains nodeBlockID for chip<0,0> and the maxBlock
-        #arg3 is not used as well
+        #arg3 is used to indicate if workers need to send their working region
         """
-        print "Broadcasting configuration...",
+        print "Sending image...",
         dpcc = (sdpImgConfigPort << 5) + sdpCore    # TODO: in future, let aplx report leadAp first!
         hdrc = struct.pack('4B2H',0x07,1,dpcc,255,0,0)
         cmd = SDP_CMD_CONFIG_CHAIN
@@ -466,6 +468,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             opt = 4
         seq = (isGray << 8) + opt
         arg1 = (self.w << 16) + self.h
+        arg3 = ASK_BLOCK_REPORT
 
         # find, what is the id of chip<0,0>
         chip0ID = 0
@@ -478,14 +481,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 blkID = struct.pack("3B",blkDict[id][0], blkDict[id][1],id)
                 ba = ba + blkID
         arg2 = (chip0ID << 16) + len(blkDict)  # arg2.high = nodeBlockID, arg2.low = maxBlock
-        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)   # arg3 is not used
+        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,arg3)   # arg3 is not used
 
         sdp = pad + hdrc + scp + ba
         udpSock = QtNetwork.QUdpSocket()
         udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
         time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
-        print "done!\nBroadcasting image..."
 
         # Test sendAck
         # for i in range(4):
@@ -525,8 +527,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         seq = (isGray << 8) + opt
         arg1 = (self.w << 16) + self.h
         arg2 = (chipIdx << 16) + nChip  # arg2.high = nodeBlockID, arg2.low = maxBlock
+        arg3 = ASK_BLOCK_REPORT
 
-        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,0)   # arg3 is not used
+        scp = struct.pack('2H3I',cmd,seq,arg1,arg2,arg3)   # arg3 is not used
         sdp = pad + hdrc + scp
         self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
         # this time, no need for reply
@@ -565,7 +568,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 rArray.append(self.rmap0[y][x])
 
         # third, iterate until all elements are sent
-        print "Sending R-channel",
+        # print "Sending R-channel",
         remaining = len(rArray)
         stepping = 16+256   # initially, it's size is SCP+data_part
         stopping = stepping
@@ -597,7 +600,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # fourth, send an empty data to signify end of image transfer
         sdp = pad + hdrr
         self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-        print "done!"
+        # print "done!"
 
         # check if the image is gray, if not, then send the green and blue layers
         # NOTE: kalau diselang-seling G dengan B, menyebabkan aplx RTE
@@ -610,7 +613,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                     bArray.append(self.bmap0[y][x])
 
             # G-channel: iterate until all elements are sent
-            print "Sending G-channel...",
+            # print "Sending G-channel...",
             remaining = len(gArray) #which is equal to len(bArray) as well
             stepping = 16+256   # initially, it's size is SCP+data_part
             stopping = stepping
@@ -642,7 +645,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             # finally, send an empty data to signify end of image transfer
             sdp = pad + hdrg
             self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-            print "done!\nSending B-channel...",
+            # print "done!\nSending B-channel...",
 
             # B-channel: iterate until all elements are sent
             remaining = len(bArray) #which is equal to len(bArray) as well
@@ -676,7 +679,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             # finally, send an empty data to signify end of image transfer
             sdp = pad + hdrb
             self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-            print "done!"
+            # print "done!"
 
         sock.close()
 
