@@ -296,12 +296,23 @@ void hSDP(uint mBox, uint port)
 			if(sark_chip_id() == 0 && chainMode==1) {
 				for(ushort i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
 					msg->dest_addr = (chips[i].x << 8) + chips[i].y;
-					msg->srce_addr = sv->p2p_addr;	// replace with my ID instead of ETH
-					msg->srce_port = myCoreID;
 					spin1_send_sdp_msg(msg, 10);
 				}
 
 			}
+		}
+		else if(msg->cmd_rc = SDP_CMD_ACK_RESULT) {
+			//io_printf(IO_STD, "Got SDP_CMD_ACK_RESULT with seq=%d\n", msg->seq);
+			spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
+			/*
+			// propagate?
+			if(sark_chip_id() == 0 && chainMode==1) {
+				for(ushort i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
+					msg->dest_addr = (chips[i].x << 8) + chips[i].y;
+					spin1_send_sdp_msg(msg, 10);
+				}
+			}
+			*/
 		}
 	}
 
@@ -509,7 +520,7 @@ void initRouter()
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
 	// then add another keys
-	e = rtr_alloc(8);
+	e = rtr_alloc(9);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -529,6 +540,28 @@ void initRouter()
 		else if(x==0 && y>0)	dest = (1 << 5);	// south
 		else					dest = leader;
 		rtr_mc_set(e, MCPL_BLOCK_DONE, 0xFFFFFFFF, dest); e++;
+
+		// special for MCPL_BCAST_HOST_ACK
+		dest = leader;
+		ushort d;	// distance
+		if(x==y) {
+			switch(x){
+			case 0:  dest += (1 << 1) + (1 << 2); break;
+			case 7:  dest += (1 << 5);
+			default: dest += (1 << 1) + (1 << 2) + (1 << 5);
+			}
+		}
+		else if(x>y) {
+			d = x - y;
+			if(y>0 && d<4)
+				dest += (1 << 5);	// south
+		}
+		else { // x<y
+			d = y - x;
+			if((x>0 && x < 5 && d<3) || (x=5 && y==6))
+				dest += (1 << 2);	// north
+		}
+		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
 	}
 }
 
