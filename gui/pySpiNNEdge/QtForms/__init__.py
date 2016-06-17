@@ -83,6 +83,7 @@ sdpImgRedPort = 1       # based on the aplx code
 sdpImgGreenPort = 2
 sdpImgBluePort = 3
 sdpImgConfigPort = 7
+sdpAckPort = 6
 SDP_CMD_CONFIG = 1
 SDP_CMD_CONFIG_CHAIN = 11
 SDP_CMD_PROCESS = 2
@@ -336,17 +337,22 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         lData = len(sdpData)
         pixel = sdpData[10:lData]
         seq =  srce_port    # not used, because we use append
+        blkID = struct.unpack('B', seq)
         srceAddr = struct.unpack('<H', srce_addr)   # will result in a tupple
         lines = srceAddr[0] >> 2
         rgb = srceAddr[0] & 3
         self.tResult[rgb] += len(pixel)
         # NOTE: in bytearray, we cannot simply use append, because it might produce ValueError: string must be of size 1
         self.res[rgb][lines]  = self.res[rgb][lines] + pixel
+        # print "Got chunk from node-{}".format(blkID[0]-1)
+        # then send acknowledge
+        self.sendAck(blkID[0])
 
     def sendAck(self, blkID):
         # Try with broadcasting method only
         # sendSDP(self,flags, tag, dp, dc, dax, day, cmd, seq, arg1, arg2, arg3, bArray):
-        dp = sdpImgConfigPort
+        # dp = sdpImgConfigPort
+        dp = sdpAckPort
         dc = sdpCore
         cmd = SDP_CMD_ACK_RESULT
         seq = blkID
@@ -489,9 +495,11 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
 
+        """
         # Test sendAck
-        # for i in range(4):
-        #   self.sendAck(i)
+        for i in range(4):
+            self.sendAck(i)
+        """
 
         # then start the broadcast by sending image to chip<0,0>
         self.sendImg(0, 0)
@@ -890,6 +898,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         CmdSock = QtNetwork.QUdpSocket()
         CmdSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        CmdSock.flush()
         return sdp
 
 

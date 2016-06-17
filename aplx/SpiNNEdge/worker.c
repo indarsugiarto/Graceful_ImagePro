@@ -171,10 +171,12 @@ void imgDetection(uint arg0, uint arg1)
 			do {
 				dmaCheck = spin1_dma_transfer((myCoreID << 16) +  DMA_FETCH_IMG_TAG, (void *)sdramImgIn,
 								   (void *)dtcmImgBuf, DMA_READ, cntPixel);
+				/*
 				if(dmaCheck==0)
 					io_printf(IO_BUF, "[Edging] DMA full! Retry...\n");
 				else
 					io_printf(IO_BUF, "[Edging] Got DMA!\n");
+				*/
 			} while (dmaCheck==0);
 			//if(dmaCheck==0) {
 			//	io_printf(IO_BUF, "DMA full!\n");
@@ -221,6 +223,7 @@ void imgDetection(uint arg0, uint arg1)
 				if(sumXY<0) sumXY = 0;
 				// resImgBuf is just one line and it doesn't matter, where it is!
 				*(resImgBuf + c) = 255 - (uchar)(sumXY);
+				//*(resImgBuf + c) = (uchar)(sumXY);
 				// TODO: what if dma full?
 				spin1_dma_transfer((myCoreID << 16) + DMA_STORE_IMG_TAG, (void *)sdramImgOut,
 								   (void *)resImgBuf, DMA_WRITE, w);
@@ -233,8 +236,8 @@ void imgDetection(uint arg0, uint arg1)
 	} // end of for all color channels
 
 	// clean-up memory in DTCM
-	sark_free(resImgBuf);
-	sark_free(dtcmImgBuf);
+	sark_free(resImgBuf);  //resImgBuf = NULL;
+	sark_free(dtcmImgBuf); //dtcmImgBuf = NULL;
 	// at the end, send MCPL_EDGE_DONE
 	io_printf(IO_BUF, "Done edge detection!\n");
 	spin1_send_mc_packet(MCPL_EDGE_DONE, 0, WITH_PAYLOAD);

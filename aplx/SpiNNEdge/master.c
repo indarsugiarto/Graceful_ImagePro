@@ -29,7 +29,7 @@ void hTimer(uint tick, uint Unused)
 	else if(tick==3) {
 		// debugging
 		printWID(0,0);
-		io_printf(IO_STD, "Chip-%d ready!\n", sv->p2p_addr);
+		io_printf(IO_STD, "Chip-%d ready!\n", blkInfo->nodeBlockID+1);
 	}
 	else if(tick==4) {
 		/*
@@ -180,17 +180,17 @@ void getImage(sdp_msg_t *msg, uint port)
 		dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
 		switch(port) {
 		case SDP_PORT_R_IMG_DATA:
-			io_printf(IO_STD, "layer-R is complete!\n");
+			//io_printf(IO_STD, "layer-R is complete!\n");
 			blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullRImageRetrieved = 1;
 			break;
 		case SDP_PORT_G_IMG_DATA:
-			io_printf(IO_STD, "layer-G is complete!\n");
+			//io_printf(IO_STD, "layer-G is complete!\n");
 			blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullGImageRetrieved = 1;
 			break;
 		case SDP_PORT_B_IMG_DATA:
-			io_printf(IO_STD, "layer-B is complete!\n");
+			//io_printf(IO_STD, "layer-B is complete!\n");
 			blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullBImageRetrieved = 1;
 			break;
@@ -200,8 +200,11 @@ void getImage(sdp_msg_t *msg, uint port)
 		// io_printf(IO_STD, "Please check my content!\n"); // --> OK!
 
 		// if grey or at the end of B image transmission, it should trigger processing
-		if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA)
+		if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
+			if(sv->p2p_addr==0)
+				io_printf(IO_STD, "Image retrieved! Start processing!\n");
 			spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
+		}
 
 	}
 }
@@ -301,9 +304,15 @@ void hSDP(uint mBox, uint port)
 
 			}
 		}
+		/*
 		else if(msg->cmd_rc = SDP_CMD_ACK_RESULT) {
-			//io_printf(IO_STD, "Got SDP_CMD_ACK_RESULT with seq=%d\n", msg->seq);
-			spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
+			io_printf(IO_BUF, "Got SDP_CMD_ACK_RESULT with seq=%d for myBlkID=%d\n",
+					  msg->seq, blkInfo->nodeBlockID);
+			if(msg->seq==blkInfo->nodeBlockID+1) {
+				hostAck = 1;
+				ackCntr++;
+			}
+			//spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
 			/*
 			// propagate?
 			if(sark_chip_id() == 0 && chainMode==1) {
@@ -312,8 +321,16 @@ void hSDP(uint mBox, uint port)
 					spin1_send_sdp_msg(msg, 10);
 				}
 			}
-			*/
 		}
+			*/
+	}
+	else if(port==SDP_PORT_ACK) {
+		if(msg->seq==blkInfo->nodeBlockID+1) {
+			hostAck = 1;
+			ackCntr++;
+		}
+		else
+			spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
 	}
 
 	// if host send images
@@ -383,6 +400,10 @@ void sendResult(uint arg0, uint arg1)
 	dtcmImgBuf == sark_alloc(workers.wImg, sizeof(uchar));
 	dLen = SDP_BUF_SIZE + sizeof(cmd_hdr_t);
 
+	hostAck = 1;
+	ackCntr = 0;
+	resultMsg.srce_port = blkInfo->nodeBlockID + 1;	//+1 to avoid 0 in srce_port
+
 	uint total[3] = {0};
 	for(uchar rgb=0; rgb<3; rgb++) {
 		if(rgb > 0 && blkInfo->isGrey==1) break;
@@ -419,19 +440,24 @@ void sendResult(uint arg0, uint arg1)
 				//resultMsg.seq = c+1;
 				sz = rem>dLen?dLen:rem;
 				//resultMsg.arg1 = sz;
-				resultMsg.srce_port = c+1;
+				//resultMsg.srce_port = c+1;
 				resultMsg.srce_addr = (lines << 2) + rgb;
 				spin1_memcpy((void *)&resultMsg.cmd_rc, (void *)(dtcmImgBuf + c*dLen), sz);
 				resultMsg.length = sizeof(sdp_hdr_t) + sz;
 
 				total[rgb] += sz;
 
-				// send via sdp
+				// wait for ack
+
+				//while(hostAck==0) {
+				//}
+
+				hostAck = 0;
 				spin1_send_sdp_msg(&resultMsg, 10);
 				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
 				//		  lines, c+1, resultMsg.tag);
 
-				spin1_delay_us((1 + blkInfo->nodeBlockID)*1000);
+				spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
 
 				// send debugging via debugMsg
 
@@ -442,20 +468,22 @@ void sendResult(uint arg0, uint arg1)
 		}
 	} // end loop channel (rgb)
 
-	io_printf(IO_STD, "Transfer done!\n");
-	io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
+	// io_printf(IO_STD, "Transfer done!\n");
+	// io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
 
 	// then send notification to chip<0,0> that my part is complete
 	spin1_send_mc_packet(MCPL_BLOCK_DONE, 0, WITH_PAYLOAD);
 
+	io_printf(IO_BUF, "Got %d counter\n", ackCntr);
 	// release dtcm
 	sark_free(dtcmImgBuf);
+	// dtcmImgBuf = NULL;
 }
 
 // afterEdgeDone() send the result to host?
 void afterEdgeDone(uint arg0, uint arg1)
 {
-	io_printf(IO_STD, "Edge detection done!\n");
+	// io_printf(IO_STD, "Edge detection done!\n");
 
 	// since each chip holds a part of image data, it needs to send individually to host
 	sendResult(0, 0);
@@ -543,11 +571,13 @@ void initRouter()
 
 		// special for MCPL_BCAST_HOST_ACK
 		dest = leader;
+#ifdef USE_SPIN5
 		ushort d;	// distance
 		if(x==y) {
 			switch(x){
-			case 0:  dest += (1 << 1) + (1 << 2); break;
-			case 7:  dest += (1 << 5);
+			//case 0:  dest += (1 << 1) + (1 << 2); break;
+			case 0:  dest = (1 << 1) + (1 << 2); break;
+			case 7:  dest += (1 << 5); break;
 			default: dest += (1 << 1) + (1 << 2) + (1 << 5);
 			}
 		}
@@ -562,6 +592,12 @@ void initRouter()
 				dest += (1 << 2);	// north
 		}
 		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+#else
+		if(sv->p2p_addr==0)
+			//dest += 1 + (1<<1) + (1<<2);
+			dest = 1 + (1<<1) + (1<<2);
+		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+#endif
 	}
 }
 

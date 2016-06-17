@@ -44,6 +44,7 @@ static const short FILT_DENOM = 159;
 #define SDP_PORT_R_IMG_DATA		1
 #define SDP_PORT_G_IMG_DATA		2
 #define SDP_PORT_B_IMG_DATA		3
+#define SDP_PORT_ACK			6
 #define SDP_PORT_CONFIG			7
 #define SDP_CMD_CONFIG			1	// will be sent via SDP_PORT_CONFIG
 #define SDP_CMD_CONFIG_CHAIN	11
@@ -161,6 +162,9 @@ uint szDMA;
 #define DMA_MOVE_IMG_G			0x47
 #define DMA_MOVE_IMG_B			0x42
 
+#define USE_SPIN3
+//#define USE_SPIN5
+
 uint myCoreID;
 w_info_t workers;
 block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
@@ -169,6 +173,7 @@ uchar nEdgeJobDone;				// finished their job in either filtering or edge detecti
 uchar nBlockDone;
 chain_t *chips;					// list of chips in a chain for image loading
 uchar chainMode;
+ushort ackCntr;
 
 // Pelajaran hari ini: Jangan taruh static di sdp_msg_t, akibatnya
 // isi variabel jadi kacau. Mungkin karena ukuran memori statis di sark dibatasi?

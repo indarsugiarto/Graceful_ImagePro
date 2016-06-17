@@ -24,6 +24,7 @@ void hDMADone(uint tid, uint tag)
 // only core <0,0,leadAp> will do
 void notifyHostDone(uint arg0, uint arg1)
 {
+	io_printf(IO_STD, "Processing done!\n");
 	resultMsg.length = sizeof(sdp_hdr_t);
 	spin1_send_sdp_msg(&resultMsg, 10);
 }
@@ -51,8 +52,11 @@ void hMCPL(uint key, uint payload)
 		spin1_schedule_callback(computeWLoad, 0, 0, PRIORITY_PROCESSING);
 	}
 	else if(key==MCPL_BCAST_HOST_ACK) {
-		if(payload==blkInfo->nodeBlockID)
+		if((ushort)payload == blkInfo->nodeBlockID+1) {
+			// io_printf(IO_BUF, "pay=%d!\n", payload);
 			hostAck = 1;
+			ackCntr++;
+		}
 	}
 	//------------------------ this is leadAp only part --------------------------
 	else if(key==MCPL_PING_REPLY) {
