@@ -32,6 +32,7 @@ void hTimer(uint tick, uint Unused)
 		io_printf(IO_STD, "Chip-%d ready!\n", sv->p2p_addr);
 	}
 	else if(tick==4) {
+        io_printf(IO_BUF, "debugMsg.tag = %d\n", debugMsg.tag);
 		/*
 		ushort x = (sv->p2p_addr >> 8) * 2;
 		ushort y = (sv->p2p_addr) & 0xFF;
@@ -47,6 +48,9 @@ void hTimer(uint tick, uint Unused)
 		computeWLoad(0,0);
 		*/
 	}
+    else if(tick==5) {
+        printWLoad();
+    }
 	else {
 
 	}
@@ -75,7 +79,11 @@ void initIPTag()
 		iptag.arg1 = (1 << 16) + SDP_TAG_RESULT;
 		iptag.arg2 = SDP_UDP_RESULT_PORT;
 		spin1_send_sdp_msg(&iptag, 10);
-	}
+        // set the debug tag
+        iptag.arg1 = (1 << 16) + SDP_TAG_DEBUG;
+        iptag.arg2 = SDP_UDP_DEBUG_PORT;
+        spin1_send_sdp_msg(&iptag, 10);
+    }
 }
 
 void sendReply(uint arg0, uint arg1)
@@ -418,8 +426,6 @@ void initSDP()
 {
 	spin1_callback_on(SDP_PACKET_RX, hSDP, PRIORITY_SDP);
 
-	io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d\n", reportMsg.tag, resultMsg.tag);
-
 	// prepare the reply message
 	reportMsg.flags = 0x07;	//no reply
 	reportMsg.tag = SDP_TAG_REPLY;
@@ -428,7 +434,6 @@ void initSDP()
 	reportMsg.dest_port = PORT_ETH;
 	reportMsg.dest_addr = sv->eth_addr;
 	reportMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);	// it's fix!
-	io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d\n", reportMsg.tag, resultMsg.tag);
 
 	// prepare the result data
 	resultMsg.flags = 0x07;
@@ -442,11 +447,18 @@ void initSDP()
 	resultMsg.dest_addr = sv->eth_addr;
 	//resultMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);	// need to be modified later
 
-	io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d\n", reportMsg.tag, resultMsg.tag);
+    // and the debug data
+    debugMsg.flags = 0x07;
+    debugMsg.tag = SDP_TAG_DEBUG;
+    debugMsg.srce_port = (SDP_PORT_CONFIG << 5) + myCoreID;
+    debugMsg.srce_addr = sv->p2p_addr;
+    debugMsg.dest_port = PORT_ETH;
+    debugMsg.dest_addr = sv->eth_addr;
+    debugMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
 
 	// prepare iptag?
 	initIPTag();
-	io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d\n", reportMsg.tag, resultMsg.tag);
+    io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d, debugMsg.tag = %d\n", reportMsg.tag, resultMsg.tag, debugMsg.tag);
 }
 
 /* initRouter() initialize MCPL routing table by leadAp. Use two keys:

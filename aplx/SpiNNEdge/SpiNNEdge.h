@@ -38,6 +38,8 @@ static const short FILT_DENOM = 159;
 #define SDP_HOST_IP				0x02F0A8C0	// 192.168.240.2, dibalik!
 #define SDP_TAG_RESULT			2
 #define SDP_UDP_RESULT_PORT		20001
+#define SDP_TAG_DEBUG           3
+#define SDP_UDP_DEBUG_PORT      20002
 
 #define SDP_PORT_R_IMG_DATA		1
 #define SDP_PORT_G_IMG_DATA		2
@@ -159,8 +161,11 @@ uchar nBlockDone;
 chain_t *chips;					// list of chips in a chain for image loading
 uchar chainMode;
 
-static sdp_msg_t reportMsg;
-static sdp_msg_t resultMsg;
+// Pelajaran hari ini: Jangan taruh static di sdp_msg_t, akibatnya
+// isi variabel jadi kacau. Mungkin karena ukuran memori statis di sark dibatasi?
+sdp_msg_t reportMsg;
+sdp_msg_t resultMsg;
+sdp_msg_t debugMsg;
 
 // forward declaration
 void triggerProcessing(uint arg0, uint arg1);	// after filterning, leadAp needs to copy
@@ -196,6 +201,7 @@ void printImgInfo(uint opType, uint None);
 void printWID(uint None, uint Neno);
 void myDelay();
 void sendReply(uint arg0, uint arg1);
+void printWLoad();
 
 #endif // SPINNEDGE_H
 

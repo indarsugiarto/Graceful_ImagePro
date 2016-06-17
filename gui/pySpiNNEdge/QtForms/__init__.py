@@ -72,8 +72,9 @@ DEF_SEND_PORT = 17893 #tidak bisa diganti dengan yang lain
 # in the aplx, it is defined:
 # define SDP_TAG_REPLY			1
 # define SDP_TAG_RESULT			2
-DEF_REPLY_PORT = 20000
-DEF_RESULT_PORT = 20001
+DEF_REPLY_PORT = 20000      # with tag 1
+DEF_RESULT_PORT = 20001     # with tag 2
+DEF_DEBUG_PORT = 20002      # with tag 3
 
 chipX = 0
 chipY = 0
@@ -127,7 +128,19 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.sdpSender = QtNetwork.QUdpSocket(self)
         self.initRptSock(DEF_RESULT_PORT)
         # self.initRptSock(DEF_REPLY_PORT)
+        self.DbgSock = QtNetwork.QUdpSocket(self)
+        self.initDbgSock(DEF_DEBUG_PORT)
 
+        self.debugVal = 0
+
+    def computeWLoad(self, nBlk, nCore):
+        """
+        Let's put in this table:
+        | Blk | wID | sLine | eLine | addrIn | addrOut |
+        """
+        n = nBlk * nCore
+        # idx = nCore + nCore*Blk
+        self.wl = [[0 for _ in range(6)] for _ in range(n)]
 
     def initRptSock(self, port):
         print "Try opening port-{} for receiving result...".format(port),
@@ -141,7 +154,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
     @QtCore.pyqtSlot()
     def readRptSDP(self):
-        print "Got something..."
+        # print "Got something..."
         while self.RptSock.hasPendingDatagrams():
             szData = self.RptSock.pendingDatagramSize()
             datagram, host, port = self.RptSock.readDatagram(szData)
@@ -151,6 +164,83 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 self.getImage(datagram)
             else:   # if aplx only send header through this UDP port, then it's finish sign
                 self.processResult()
+
+    def initDbgSock(self, port):
+        print "Try opening port-{} for receiving debug info...".format(port),
+        #result = self.sock.bind(QtNetwork.QHostAddress.LocalHost, DEF.RECV_PORT) --> problematik dengan penggunaan LocalHost
+        result = self.DbgSock.bind(port)
+        if result is False:
+            print 'failed! Cannot open UDP port-{}'.format(port)
+        else:
+            print "done!"
+            self.DbgSock.readyRead.connect(self.readDbgSDP)
+
+    @QtCore.pyqtSlot()
+    def readDbgSDP(self):
+        print "Got something..."
+        while self.DbgSock.hasPendingDatagrams():
+            szData = self.DbgSock.pendingDatagramSize()
+            datagram, host, port = self.DbgSock.readDatagram(szData)
+            self.processDebug(datagram, 4, 17)
+
+    def processDebug(self, dgram, nBlk, nCore):
+        """
+        cmd_rc = Blk
+        seq = wID
+        arg1 = sLine
+        arg2 = eLine
+        arg3 = addr
+
+        pad = dgram[0:2]      -> 2B
+        flags = dgram[2:3]    -> B
+        tag = dgram[3:4]      -> B
+        dp = dgram[4:5]       -> B
+        sp = dgram[5:6]       -> B
+        da = dgram[6:8]       -> 2B
+        sa = dgram[8:10]      -> 2B
+        cmd = dgram[10:12]
+        seq = dgram[12:14]
+        arg1 = dgram[14:18]
+        arg2 = dgram[18:22]
+        arg3 = dgram[22:26]
+        """
+
+        # get srce:
+        cmd = dgram[10:12]
+        seq = dgram[12:14]
+        arg1 = dgram[14:18]
+        arg2 = dgram[18:22]
+        arg3 = dgram[22:26]
+
+        Blk = struct.unpack('<H', cmd)
+        wID = struct.unpack('<H', seq)
+        Line = struct.unpack('<I', arg1)
+        addrIn = struct.unpack('<I', arg2)
+        addrOut = struct.unpack('I', arg3)
+
+        sLine = Line[0] >> 16
+        eLine = Line[0] & 0xFFFF
+
+        idx = wID[0] + nCore*Blk[0]
+
+        self.wl[idx][0] = Blk[0]
+        self.wl[idx][1] = wID[0]
+        self.wl[idx][2] = sLine
+        self.wl[idx][3] = eLine
+        self.wl[idx][4] = addrIn[0]
+        self.wl[idx][5] = addrOut[0]
+
+        self.debugVal += 1
+
+        # if all cores have been reporting, print the table
+        if self.debugVal == len(self.wl):
+            """
+            """
+            print "Blk\twID\tsLine\teLine\taddrIn\taddrOut"
+            print "-------------------------------------------------"
+            for l in self.wl:
+                print "%d\t%d\t%d\t%d\t0x%x\t0x%x".format(l[0], l[1], l[2], l[3], l[4], l[5])
+
 
     def processResult(self):
         print "Result is received completely!"
@@ -221,7 +311,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         #print self.fName    #this will contains the full path as well!
         if self.fName == "" or self.fName is None:
             return
-        self.img = QtGui.QImage(self)
+        self.img = QtGui.QImage()
         self.img.load(self.fName)
         self.w = self.img.width()
         self.h = self.img.height()
@@ -235,7 +325,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.img32 = self.img.convertToFormat(QtGui.QImage.Format_RGB32)
 
         # Idea: use QImage for direct pixel manipulation and use QPixmap for rendering
-        self.pixmap = QtGui.QPixmap(self)
+        self.pixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
         self.pixmap.convertFromImage(self.img32)
         #self.pixmap.load(self.fName) #pixmap.load() works just fine
@@ -268,6 +358,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 self.gmap0[y][x] = rgb.green()
                 self.bmap0[y][x] = rgb.blue()
 
+        self.computeWLoad(4, 17)
         print "Image is loaded!"
 
 

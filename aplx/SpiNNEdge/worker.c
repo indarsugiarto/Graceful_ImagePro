@@ -4,6 +4,7 @@
 
 void printWLoad()
 {
+    io_printf(IO_BUF, "debugMsg.tag = %d\n", debugMsg.tag);
 	// io_printf(IO_BUF, "wID = %d\n", workers.wID[myCoreID]);
 	io_printf(IO_BUF, "subBlockID = %d\n", workers.subBlockID);
 	io_printf(IO_BUF, "tAvailable = %d\n", workers.tAvailable);
@@ -81,8 +82,23 @@ void computeWLoad(uint arg0, uint arg1)
 	// so, each work has different value of those workers.img*
 
 	// let's print the resulting workload
-	io_printf(IO_BUF, "sp = %d, ep = %d\n", workers.startLine, workers.endLine);
-	printWLoad();
+    // io_printf(IO_BUF, "sp = %d, ep = %d\n", workers.startLine, workers.endLine);
+    printWLoad();
+    debugMsg.cmd_rc = blkInfo->nodeBlockID;
+    debugMsg.seq = workers.subBlockID;
+    debugMsg.arg1 = (workers.startLine << 16) + workers.endLine;
+    debugMsg.arg2 = (uint)workers.imgRIn;
+    debugMsg.arg3 = (uint)workers.imgROut;
+    spin1_delay_us((blkInfo->nodeBlockID*17+workers.subBlockID)*100);
+    /*
+    uint checkSDP = 0;
+    do {
+        checkSDP = spin1_send_sdp_msg(&debugMsg, 10);
+        if(checkSDP==0)
+            io_printf(IO_BUF, "Send SDP fail! Retry!");
+    } while(checkSDP == 0);
+    */
+    // io_printf(IO_BUF, "debugMsg is sent via tag-%d!\n", debugMsg.tag);
 }
 
 void imgFiltering(uint arg0, uint arg1)
