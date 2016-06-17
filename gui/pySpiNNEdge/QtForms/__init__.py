@@ -9,6 +9,7 @@ import math
 import os
 import struct
 import socket
+import time
 
 # Sobel operator
 """
@@ -131,6 +132,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.DbgSock = QtNetwork.QUdpSocket(self)
         self.initDbgSock(DEF_DEBUG_PORT)
 
+        self.tResult = [0,0,0]
+
         self.debugVal = 0
 
     def computeWLoad(self, nBlk, nCore):
@@ -177,7 +180,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
     @QtCore.pyqtSlot()
     def readDbgSDP(self):
-        print "Got something..."
+        # print "Got something..."
         while self.DbgSock.hasPendingDatagrams():
             szData = self.DbgSock.pendingDatagramSize()
             datagram, host, port = self.DbgSock.readDatagram(szData)
@@ -233,17 +236,49 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.debugVal += 1
 
         # if all cores have been reporting, print the table
+        misFound = False
         if self.debugVal == len(self.wl):
             """
             """
-            print "Blk\twID\tsLine\teLine\taddrIn\taddrOut"
+            inA = 0x61000000
+            outA = 0x64000000
+            print "Blk\twID\tsLine\teLine\taddrIn\taddrOut\tExpAddIn\tExpAddOut"
             print "-------------------------------------------------"
             for l in self.wl:
-                print "%d\t%d\t%d\t%d\t0x%x\t0x%x".format(l[0], l[1], l[2], l[3], l[4], l[5])
+                print "%d\t%d\t%d\t%d\t0x%x\t0x%x\t0x%x\t0x%x" % (l[0], l[1], l[2], l[3], l[4], l[5], inA, outA)
+                if inA != l[4] or outA != l[5]:
+                    misFound = True
+                inA += (l[3]-l[2]+1)*self.w
+                outA += (l[3]-l[2]+1)*self.w
+            if misFound == True:
+                print "Found mismatch in address!!!"
+            else:
+                print "Region splitting seems to be correct!"
 
+    def saveResult(self):
+        """
+        dump the content of self.res into files
+        """
+        fileR = open(self.fName + ".resR", 'wb')
+        fileG = open(self.fName + ".resG", 'wb')
+        fileB = open(self.fName + ".resB", 'wb')
+
+        for y in range(self.h):
+            r = self.res[0][y]
+            g = self.res[1][y]
+            b = self.res[2][y]
+            fileR.write(r)
+            fileG.write(g)
+            fileB.write(b)
+        fileR.close()
+        fileG.close()
+        fileB.close()
 
     def processResult(self):
         print "Result is received completely!"
+        self.saveResult()
+        print "Total pixel = ", self.tResult
+        # return
         # How to render?
         imgResult = QtGui.QImage(self.w, self.h, QtGui.QImage.Format_RGB32)
         for y in range(self.h):
@@ -297,11 +332,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         srce_addr = sdpData[8:10]
         lData = len(sdpData)
         pixel = sdpData[10:lData]
-        seq =  srce_port
+        seq =  srce_port    # not used, because we use append
         srceAddr = struct.unpack('<H', srce_addr)   # will result in a tupple
         lines = srceAddr[0] >> 2
         rgb = srceAddr[0] & 3
-        self.res[rgb][lines].append(pixel)
+        self.tResult[rgb] += len(pixel)
+        # NOTE: in bytearray, we cannot simply use append, because it might produce ValueError: string must be of size 1
+        self.res[rgb][lines]  = self.res[rgb][lines] + pixel
 
 
     @QtCore.pyqtSlot()
@@ -438,6 +475,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         udpSock = QtNetwork.QUdpSocket()
         udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
+        time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
         print "done!\nBroadcasting image..."
 
         # then start the broadcast by sending image to chip<0,0>
@@ -479,6 +517,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         sdp = pad + hdrc + scp
         self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
         # this time, no need for reply
+
+        time.sleep(1)   # wait a second
+        print "Sending image..."
 
         self.sendImg(x, y)
 
@@ -691,7 +732,11 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         dc = sdpCore
         dp = sdpImgConfigPort
         cmd = SDP_CMD_CLEAR
-        self.sendSDP(0x07, 0, dp, dc, chipX, chipY, cmd, 0, 0, 0, 0, None)
+        if SEND_METHOD==1:
+            self.sendSDP(0x07, 0, dp, dc, chipX, chipY, cmd, 0, 0, 0, 0, None)
+        else:
+            for i in range(4):
+                self.sendSDP(0x07, 0, dp, dc, spin3[i][0], spin3[i][1], cmd, 0, 0, 0, 0, None)
 
     def doFiltering(self):
         print "do filtering...",

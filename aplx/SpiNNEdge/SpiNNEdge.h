@@ -117,12 +117,18 @@ typedef struct w_info {
 	// helper pointers
 	ushort wImg;		// just a copy of block_info_t.wImg
 	ushort hImg;		// just a copy of block_info_t.hImg
-	uchar *imgRIn;
-	uchar *imgGIn;
-	uchar *imgBIn;
-	uchar *imgROut;
-	uchar *imgGOut;
-	uchar *imgBOut;
+	uchar *imgRIn;		// each worker has its own value of imgRIn --> workload base
+	uchar *imgGIn;		// idem
+	uchar *imgBIn;		// idem
+	uchar *imgROut;		// idem
+	uchar *imgGOut;		// idem
+	uchar *imgBOut;		// idem
+	uchar *blkImgRIn;	// this will be shared among cores in the same chip
+	uchar *blkImgGIn;	// idem
+	uchar *blkImgBIn;	// idem
+	uchar *blkImgROut;	// idem
+	uchar *blkImgGOut;	// idem
+	uchar *blkImgBOut;	// idem
 } w_info_t;
 
 typedef struct chain {
@@ -163,9 +169,9 @@ uchar chainMode;
 
 // Pelajaran hari ini: Jangan taruh static di sdp_msg_t, akibatnya
 // isi variabel jadi kacau. Mungkin karena ukuran memori statis di sark dibatasi?
-sdp_msg_t reportMsg;
-sdp_msg_t resultMsg;
-sdp_msg_t debugMsg;
+sdp_msg_t reportMsg;			// in python, this will be handled in blocking mode (via native socket)
+sdp_msg_t resultMsg;			// in python, this will be handled by QtNetwork.QUdpSocket
+sdp_msg_t debugMsg;				// in python, this will be handled by QtNetwork.QUdpSocket
 
 // forward declaration
 void triggerProcessing(uint arg0, uint arg1);	// after filterning, leadAp needs to copy
@@ -179,6 +185,7 @@ void initIPTag();
 void hDMADone(uint tid, uint tag);
 void hTimer(uint tick, uint Unused);
 void hMCPL(uint key, uint payload);
+void hSDP(uint mBox, uint port);
 void imgFiltering(uint arg0, uint arg1);
 void imgProcessing(uint arg0, uint arg1);
 void cleanUp();
@@ -188,13 +195,13 @@ void afterEdgeDone(uint arg0, uint arg1);
 void sendResult(uint arg0, uint arg1);
 void notifyHostDone(uint arg0, uint arg1);	// inform host that all results have been sent
 
-static uchar *dtcmImgBuf = NULL;
+uchar *dtcmImgBuf;
 // for fetching/storing image
 volatile uchar dmaImgFromSDRAMdone;
 // also for copying image from sdp to sdram via dma
 volatile uchar dmaImg2SDRAMdone;
-ushort dLen;
-uchar whichRGB;	//0=R, 1=G, 2=B
+volatile ushort dLen;
+volatile uchar whichRGB;	//0=R, 1=G, 2=B
 
 // helper/debugging functions
 void printImgInfo(uint opType, uint None);

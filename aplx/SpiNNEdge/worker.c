@@ -81,24 +81,37 @@ void computeWLoad(uint arg0, uint arg1)
 	workers.imgBOut = blkInfo->imgBOut + w*workers.startLine;
 	// so, each work has different value of those workers.img*
 
+	// leadAp needs to know, the address of image block
+	// it will be used for sending result to host-PC
+	if(leadAp) {
+		uint szBlk = (workers.blkEnd - workers.blkStart + 1) * workers.wImg;
+		uint offset = blkInfo->nodeBlockID * szBlk;
+		workers.blkImgRIn = blkInfo->imgRIn + offset;
+		workers.blkImgGIn = blkInfo->imgGIn + offset;
+		workers.blkImgBIn = blkInfo->imgBIn + offset;
+		workers.blkImgROut = blkInfo->imgROut + offset;
+		workers.blkImgGOut = blkInfo->imgGOut + offset;
+		workers.blkImgBOut = blkInfo->imgBOut + offset;
+	}
+
 	// let's print the resulting workload
     // io_printf(IO_BUF, "sp = %d, ep = %d\n", workers.startLine, workers.endLine);
-    printWLoad();
+	// printWLoad();
     debugMsg.cmd_rc = blkInfo->nodeBlockID;
     debugMsg.seq = workers.subBlockID;
     debugMsg.arg1 = (workers.startLine << 16) + workers.endLine;
     debugMsg.arg2 = (uint)workers.imgRIn;
     debugMsg.arg3 = (uint)workers.imgROut;
     spin1_delay_us((blkInfo->nodeBlockID*17+workers.subBlockID)*100);
-    /*
-    uint checkSDP = 0;
+
+	uint checkSDP = 0;
     do {
         checkSDP = spin1_send_sdp_msg(&debugMsg, 10);
         if(checkSDP==0)
             io_printf(IO_BUF, "Send SDP fail! Retry!");
     } while(checkSDP == 0);
-    */
-    // io_printf(IO_BUF, "debugMsg is sent via tag-%d!\n", debugMsg.tag);
+
+	io_printf(IO_BUF, "debugMsg is sent via tag-%d!\n", debugMsg.tag);
 }
 
 void imgFiltering(uint arg0, uint arg1)
@@ -156,9 +169,10 @@ void imgDetection(uint arg0, uint arg1)
 			do {
 				dmaCheck = spin1_dma_transfer((myCoreID << 16) +  DMA_FETCH_IMG_TAG, (void *)sdramImgIn,
 								   (void *)dtcmImgBuf, DMA_READ, cntPixel);
-				if(dmaCheck==0) {
-					io_printf(IO_BUF, "DMA full! Retry...\n");
-				}
+				if(dmaCheck==0)
+					io_printf(IO_BUF, "[Edging] DMA full! Retry...\n");
+				else
+					io_printf(IO_BUF, "[Edging] Got DMA!\n");
 			} while (dmaCheck==0);
 			//if(dmaCheck==0) {
 			//	io_printf(IO_BUF, "DMA full!\n");

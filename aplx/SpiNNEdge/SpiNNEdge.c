@@ -21,10 +21,11 @@ void hDMADone(uint tid, uint tag)
 	}
 }
 
+// only core <0,0,leadAp> will do
 void notifyHostDone(uint arg0, uint arg1)
 {
-	reportMsg.length = sizeof(sdp_hdr_t);
-	spin1_send_sdp_msg(&reportMsg, 10);
+	resultMsg.length = sizeof(sdp_hdr_t);
+	spin1_send_sdp_msg(&resultMsg, 10);
 }
 
 void hMCPL(uint key, uint payload)
@@ -77,6 +78,7 @@ void c_main()
 	myCoreID = sark_core_id();
 	spin1_callback_on(MCPL_PACKET_RECEIVED, hMCPL, PRIORITY_MCPL);
 	spin1_callback_on(DMA_TRANSFER_DONE, hDMADone, PRIORITY_DMA);
+	initSDP();	// sebelumnya hanya leadAp, tapi masalahnya semua core butuh reportMsg dan debugMsg
 
 	// only leadAp has access to dma and sdp
 	if(leadAp) {
@@ -103,11 +105,12 @@ void c_main()
 			initImage();	// some of blkInfo are initialized there
 		spin1_set_timer_tick(TIMER_TICK_PERIOD_US);
 		spin1_callback_on(TIMER_TICK, hTimer, PRIORITY_TIMER);
+		spin1_callback_on(SDP_PACKET_RX, hSDP, PRIORITY_SDP);
+
 		workers.wID[0] = myCoreID;
 		workers.tAvailable = 1;
 		workers.subBlockID = 0;	// leadAp has task ID-0
 		chips = NULL;
-		initSDP();
 		initRouter();
 		initIPTag();
 	}
