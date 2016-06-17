@@ -87,6 +87,7 @@ SDP_CMD_CONFIG = 1
 SDP_CMD_CONFIG_CHAIN = 11
 SDP_CMD_PROCESS = 2
 SDP_CMD_CLEAR = 3
+SDP_CMD_ACK_RESULT = 4
 IMG_OP_SOBEL_NO_FILT	= 1	# will be carried in arg2.low
 IMG_OP_SOBEL_WITH_FILT	= 2	# will be carried in arg2.low
 IMG_OP_LAP_NO_FILT		= 3	# will be carried in arg2.low
@@ -340,6 +341,14 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # NOTE: in bytearray, we cannot simply use append, because it might produce ValueError: string must be of size 1
         self.res[rgb][lines]  = self.res[rgb][lines] + pixel
 
+    def sendAck(self, blkID):
+        # Try with broadcasting method only
+        # sendSDP(self,flags, tag, dp, dc, dax, day, cmd, seq, arg1, arg2, arg3, bArray):
+        dp = sdpImgConfigPort
+        dc = sdpCore
+        cmd = SDP_CMD_ACK_RESULT
+        seq = blkID
+        self.sendSDP(0x07, 0, dp, dc, 0, 0, cmd, seq, 0, 0, 0, None)
 
     @QtCore.pyqtSlot()
     def pbLoadClicked(self):
@@ -477,6 +486,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
         print "done!\nBroadcasting image..."
+
+        # Test sendAck
+        # for i in range(4):
+        #   self.sendAck(i)
 
         # then start the broadcast by sending image to chip<0,0>
         self.sendImg(0, 0)

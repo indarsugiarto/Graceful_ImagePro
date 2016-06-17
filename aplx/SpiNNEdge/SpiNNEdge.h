@@ -49,6 +49,8 @@ static const short FILT_DENOM = 159;
 #define SDP_CMD_CONFIG_CHAIN	11
 #define SDP_CMD_PROCESS			2	// will be sent via SDP_PORT_CONFIG
 #define SDP_CMD_CLEAR			3	// will be sent via SDP_PORT_CONFIG
+#define SDP_CMD_ACK_RESULT		4
+
 #define SDP_CMD_HOST_SEND_IMG	0x1234
 #define SDP_CMD_REPLY_HOST_SEND_IMG	0x4321
 #define IMG_OP_SOBEL_NO_FILT	1	// will be carried in arg2.low
@@ -77,6 +79,7 @@ static const short FILT_DENOM = 159;
 #define MCPL_EDGE_DONE			0x1ead0003
 //special key (with values)
 #define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
+#define MCPL_BCAST_HOST_ACK		0xbca50005	// broadcasting host acknowledge
 
 //some definitions
 #define FLAG_FILTERING_DONE		0xf117
@@ -202,6 +205,7 @@ volatile uchar dmaImgFromSDRAMdone;
 volatile uchar dmaImg2SDRAMdone;
 volatile ushort dLen;
 volatile uchar whichRGB;	//0=R, 1=G, 2=B
+volatile uchar hostAck;
 
 // helper/debugging functions
 void printImgInfo(uint opType, uint None);

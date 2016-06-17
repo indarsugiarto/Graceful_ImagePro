@@ -50,7 +50,10 @@ void hMCPL(uint key, uint payload)
 	else if(key==MCPL_BCAST_GET_WLOAD) {
 		spin1_schedule_callback(computeWLoad, 0, 0, PRIORITY_PROCESSING);
 	}
-
+	else if(key==MCPL_BCAST_HOST_ACK) {
+		if(payload==blkInfo->nodeBlockID)
+			hostAck = 1;
+	}
 	//------------------------ this is leadAp only part --------------------------
 	else if(key==MCPL_PING_REPLY) {
 		workers.wID[workers.tAvailable] = payload;	// this will be automatically mapped to workers.subBlockID[workers.tAvailable]
