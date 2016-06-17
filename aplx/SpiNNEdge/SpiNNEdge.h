@@ -81,6 +81,7 @@ static const short FILT_DENOM = 159;
 //special key (with values)
 #define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
 #define MCPL_BCAST_HOST_ACK		0xbca50005	// broadcasting host acknowledge
+#define MCPL_BCAST_CMD_SEND_RESULT  0xbca50006  // broadcast command to start the sending sequence
 
 //some definitions
 #define FLAG_FILTERING_DONE		0xf117
@@ -200,7 +201,7 @@ void cleanUp();
 void computeWLoad(uint withReport, uint arg1);
 void afterFiltDone(uint arg0, uint arg1);
 void afterEdgeDone(uint arg0, uint arg1);
-void sendResult(uint arg0, uint arg1);
+void sendResult(uint nodeID, uint arg1);
 void notifyHostDone(uint arg0, uint arg1);	// inform host that all results have been sent
 
 uchar *dtcmImgBuf;

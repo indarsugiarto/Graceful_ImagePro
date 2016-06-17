@@ -382,8 +382,9 @@ void afterFiltDone(uint arg0, uint arg1)
 // check: sendResult() will be executed only by leadAp
 // we cannot use workers.imgROut, because workers.imgROut differs from core to core
 // use workers.blkImgROut instead!
-void sendResult(uint arg0, uint arg1)
+void sendResult(uint nodeID, uint arg1)
 {
+    // TODO: should we check if nodeID equal our nodeBlockID?
 	// format sdp (scp_segment + data_segment):
 	// cmd_rc = line number
 	// seq = sequence of data
@@ -409,10 +410,11 @@ void sendResult(uint arg0, uint arg1)
 		if(rgb > 0 && blkInfo->isGrey==1) break;
 		resultMsg.arg2 = rgb;
 
-		// io_printf(IO_STD, "[Sending] result channel-%d...\n", rgb);
+        io_printf(IO_STD, "[Sending] result channel-%d...\n", rgb);
 
 		l = 0;	// for the imgXOut pointer
 		for(ushort lines=workers.blkStart; lines<=workers.blkEnd; lines++) {
+            io_printf(IO_BUF, "[Sending] Processing line-%d!\n", lines);
 
 			// get the line from sdram
 			switch(rgb) {
@@ -435,7 +437,8 @@ void sendResult(uint arg0, uint arg1)
 			// then sequentially copy & send via sdp
 			c = 0;
 			rem = workers.wImg;
-			do {
+            io_printf(IO_BUF, "[Sending] Loading into sdp part-%d!\n", c+1);
+            do {
 				//resultMsg.cmd_rc = lines;
 				//resultMsg.seq = c+1;
 				sz = rem>dLen?dLen:rem;
@@ -454,8 +457,8 @@ void sendResult(uint arg0, uint arg1)
 
 				hostAck = 0;
 				spin1_send_sdp_msg(&resultMsg, 10);
-				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
-				//		  lines, c+1, resultMsg.tag);
+                io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
+                          lines, c+1, resultMsg.tag);
 
 				spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
 
@@ -471,22 +474,28 @@ void sendResult(uint arg0, uint arg1)
 	// io_printf(IO_STD, "Transfer done!\n");
 	// io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
 
+    // then notify the other chip, that we're done -> send our ID
+    io_printf(IO_STD, "Broadcasting my completion...\n");
+    spin1_send_mc_packet(MCPL_BCAST_CMD_SEND_RESULT, blkInfo->nodeBlockID, WITH_PAYLOAD);
+
 	// then send notification to chip<0,0> that my part is complete
 	spin1_send_mc_packet(MCPL_BLOCK_DONE, 0, WITH_PAYLOAD);
 
 	io_printf(IO_BUF, "Got %d counter\n", ackCntr);
 	// release dtcm
 	sark_free(dtcmImgBuf);
-	// dtcmImgBuf = NULL;
+    dtcmImgBuf = NULL;
 }
 
-// afterEdgeDone() send the result to host?
+// afterEdgeDone() will be triggered if all cores in the chip have finished their job
 void afterEdgeDone(uint arg0, uint arg1)
 {
 	// io_printf(IO_STD, "Edge detection done!\n");
 
 	// since each chip holds a part of image data, it needs to send individually to host
-	sendResult(0, 0);
+    if(sv->p2p_addr==0) // only chip<0,0> will trigger the chain
+        spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+        // inside this, MCPL_BCAST_CMD_SEND_RESULT will be triggered
 }
 
 void initSDP()
@@ -548,7 +557,7 @@ void initRouter()
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
 	// then add another keys
-	e = rtr_alloc(9);
+    e = rtr_alloc(10);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -569,8 +578,8 @@ void initRouter()
 		else					dest = leader;
 		rtr_mc_set(e, MCPL_BLOCK_DONE, 0xFFFFFFFF, dest); e++;
 
-		// special for MCPL_BCAST_HOST_ACK
-		dest = leader;
+        // special for MCPL_BCAST_HOST_ACK and MCPL_BCAST_CMD_SEND_RESULT
+        dest = leader;  // send to leadAp, except in chip<0,0>, see below
 #ifdef USE_SPIN5
 		ushort d;	// distance
 		if(x==y) {
@@ -592,11 +601,13 @@ void initRouter()
 				dest += (1 << 2);	// north
 		}
 		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+        rtr_mc_set(e, MCPL_BCAST_CMD_SEND_RESULT, 0xFFFFFFFF, dest);
 #else
 		if(sv->p2p_addr==0)
 			//dest += 1 + (1<<1) + (1<<2);
-			dest = 1 + (1<<1) + (1<<2);
+            dest = 1 + (1<<1) + (1<<2); // excluding chip<0,0>
 		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+        rtr_mc_set(e, MCPL_BCAST_CMD_SEND_RESULT, 0xFFFFFFFF, dest);
 #endif
 	}
 }
