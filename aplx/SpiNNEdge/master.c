@@ -8,7 +8,7 @@
 void hTimer(uint tick, uint Unused)
 {
 	// first-tick: populate workers
-	if(tick==1) {
+    if(tick==0) {
 		sark_delay_us(1000*sv->p2p_addr);
 		io_printf(IO_BUF, "Collecting worker IDs...\n");
 		/* Initial process: broadcast info:
@@ -19,37 +19,21 @@ void hTimer(uint tick, uint Unused)
 		spin1_send_mc_packet(MCPL_BCAST_INFO_KEY, (uint)blkInfo, WITH_PAYLOAD);
 	}
 	// second tick: broadcast info to workers, assuming 1-sec is enough for ID collection
-	else if(tick==2) {
+    else if(tick==1) {
 		sark_delay_us(1000*sv->p2p_addr);
 		io_printf(IO_BUF, "Distributing wIDs...\n");
 		// payload.high = tAvailable, payload.low = wID
 		for(uint i= 1; i<workers.tAvailable; i++)
 			spin1_send_mc_packet(workers.wID[i], (workers.tAvailable << 16) + i, WITH_PAYLOAD);
 	}
-	else if(tick==3) {
+    else if(tick==2) {
 		// debugging
 		printWID(0,0);
-		io_printf(IO_STD, "Chip-%d ready!\n", blkInfo->nodeBlockID+1);
-	}
-	else if(tick==4) {
-		/*
-		ushort x = (sv->p2p_addr >> 8) * 2;
-		ushort y = (sv->p2p_addr) & 0xFF;
-		sark_delay_us(1000*sv->p2p_addr);
-		io_printf(IO_STD, "Simulating 1000x1007 pixels!\n");
-		blkInfo->isGrey = 0; //1=Grey, 0=color
-		blkInfo->wImg = 1000;
-		blkInfo->hImg = 1007;
-		blkInfo->nodeBlockID = x+y;
-		blkInfo->maxBlock = 4;
-		blkInfo->imageInfoRetrieved = 1;
-		spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, 0, WITH_PAYLOAD);
-		computeWLoad(0,0);
-		*/
-	}
-    else if(tick==5) {
-
-	}
+        //yang berikut akan menghasilkan "Chip-56320 ready!" --> Chip-56320 ???
+        //io_printf(IO_STD, "Chip-%d ready!\n", blkInfo->nodeBlockID+1);
+        io_printf(IO_STD, "[SpiNNEdge] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
+                  CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+    }
 	else {
 
 	}
@@ -461,7 +445,7 @@ void sendResult(uint arg0, uint arg1)
 				//		  lines, c+1, resultMsg.tag);
 
 				//spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
-				spin1_delay_us(150);
+                spin1_delay_us(150);
 
 				// send debugging via debugMsg
 
@@ -472,7 +456,7 @@ void sendResult(uint arg0, uint arg1)
 		}
 	} // end loop channel (rgb)
 
-	io_printf(IO_STD, "Transfer done!\n");
+    io_printf(IO_STD, "Block-%d done!\n", blkInfo->nodeBlockID);
 	io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
 
 	// then send notification to chip<0,0> that my part is complete
@@ -626,8 +610,8 @@ void initImage()
 // terminate gracefully
 void cleanUp()
 {
-	//sark_xfree(sv->sysram_heap, blkInfo, ALLOC_LOCK);
-	sark_xfree(sv->sdram_heap, blkInfo, ALLOC_LOCK);
+    sark_xfree(sv->sysram_heap, blkInfo, ALLOC_LOCK);
+    //sark_xfree(sv->sdram_heap, blkInfo, ALLOC_LOCK);
 	// in this app, we "fix" the address of image, no need for xfree
 
 	/*

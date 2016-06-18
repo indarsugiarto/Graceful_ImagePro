@@ -105,13 +105,11 @@ void c_main()
 		io_printf(IO_BUF, "reportMsg @ 0x%x, resultMsg @ 0x%x\n", reportMsg, resultMsg);
 		*/
 
-		io_printf(IO_STD, "[SpiNNEdge] leadAp running @ core-%d\n", sark_core_id());
-		io_printf(IO_BUF, "Will allocate %d in sysram\n", sizeof(block_info_t));
 		// prepare chip-level image block information
-		//blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
-		//					  sark_app_id(), ALLOC_LOCK);
-		blkInfo = sark_xalloc(sv->sdram_heap, sizeof(block_info_t),
-									  sark_app_id(), ALLOC_LOCK);
+        blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
+                              sark_app_id(), ALLOC_LOCK);
+        //blkInfo = sark_xalloc(sv->sdram_heap, sizeof(block_info_t),
+        //							  sark_app_id(), ALLOC_LOCK);
 		if(blkInfo==NULL) {
 			io_printf(IO_BUF, "blkInfo alloc error!\n");
 			rt_error(RTE_ABORT);

@@ -295,7 +295,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 imgResult.setPixel(x,y,clr)
 
         # Then display it on the second graphicsView
-        resultPixmap = QtGui.QPixmap(self)
+        resultPixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
         resultPixmap.convertFromImage(imgResult)
         #self.pixmap.load(self.fName) #pixmap.load() works just fine
