@@ -51,14 +51,15 @@ void hMCPL(uint key, uint payload)
 	else if(key==MCPL_BCAST_GET_WLOAD) {
 		spin1_schedule_callback(computeWLoad, 0, 0, PRIORITY_PROCESSING);
 	}
-	else if(key==MCPL_BCAST_HOST_ACK) {
-		if((ushort)payload == blkInfo->nodeBlockID+1) {
-			// io_printf(IO_BUF, "pay=%d!\n", payload);
-			hostAck = 1;
-			ackCntr++;
-		}
-	}
 	//------------------------ this is leadAp only part --------------------------
+	else if(key==MCPL_BCAST_SEND_RESULT) {
+		//if(payload == blkInfo->nodeBlockID) {
+			spin1_schedule_callback(sendResult, payload, 0, PRIORITY_PROCESSING);
+			// io_printf(IO_BUF, "pay=%d!\n", payload);
+			//hostAck = 1;
+			//ackCntr++;
+		//}
+	}
 	else if(key==MCPL_PING_REPLY) {
 		workers.wID[workers.tAvailable] = payload;	// this will be automatically mapped to workers.subBlockID[workers.tAvailable]
 		workers.tAvailable++;
@@ -75,8 +76,15 @@ void hMCPL(uint key, uint payload)
 	}
 	else if(key==MCPL_BLOCK_DONE) {
 		nBlockDone++;
-		if(nBlockDone==blkInfo->maxBlock)
+		if(nBlockDone==blkInfo->maxBlock) {
 			spin1_schedule_callback(notifyHostDone, 0, 0, PRIORITY_PROCESSING);
+		}
+		// if I'm block-0, continue the chain
+		//else {
+		else if(blkInfo->nodeBlockID==0) {
+			spin1_send_mc_packet(MCPL_BCAST_SEND_RESULT, ++payload, WITH_PAYLOAD);
+		}
+
 	}
 }
 

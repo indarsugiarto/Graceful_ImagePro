@@ -324,6 +324,7 @@ void hSDP(uint mBox, uint port)
 		}
 			*/
 	}
+	/*
 	else if(port==SDP_PORT_ACK) {
 		if(msg->seq==blkInfo->nodeBlockID+1) {
 			hostAck = 1;
@@ -332,7 +333,7 @@ void hSDP(uint mBox, uint port)
 		else
 			spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
 	}
-
+	*/
 	// if host send images
 	// NOTE: what if we use arg part of SCP for image data? OK let's try, because see HOW.DO...
 	else if(port==SDP_PORT_R_IMG_DATA) {
@@ -384,6 +385,8 @@ void afterFiltDone(uint arg0, uint arg1)
 // use workers.blkImgROut instead!
 void sendResult(uint arg0, uint arg1)
 {
+	//io_printf(IO_STD, "Expecting processing by node-%d\n", arg0);
+	if(arg0 != blkInfo->nodeBlockID) return;
 	// format sdp (scp_segment + data_segment):
 	// cmd_rc = line number
 	// seq = sequence of data
@@ -457,7 +460,8 @@ void sendResult(uint arg0, uint arg1)
 				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
 				//		  lines, c+1, resultMsg.tag);
 
-				spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
+				//spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
+				spin1_delay_us(150);
 
 				// send debugging via debugMsg
 
@@ -468,11 +472,11 @@ void sendResult(uint arg0, uint arg1)
 		}
 	} // end loop channel (rgb)
 
-	// io_printf(IO_STD, "Transfer done!\n");
-	// io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
+	io_printf(IO_STD, "Transfer done!\n");
+	io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
 
 	// then send notification to chip<0,0> that my part is complete
-	spin1_send_mc_packet(MCPL_BLOCK_DONE, 0, WITH_PAYLOAD);
+	spin1_send_mc_packet(MCPL_BLOCK_DONE, blkInfo->nodeBlockID, WITH_PAYLOAD);
 
 	io_printf(IO_BUF, "Got %d counter\n", ackCntr);
 	// release dtcm
@@ -486,7 +490,9 @@ void afterEdgeDone(uint arg0, uint arg1)
 	// io_printf(IO_STD, "Edge detection done!\n");
 
 	// since each chip holds a part of image data, it needs to send individually to host
-	sendResult(0, 0);
+	if(blkInfo->nodeBlockID==0)	// trigger the chain
+		spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+		// sendResult(0, 0);
 }
 
 void initSDP()
@@ -569,7 +575,7 @@ void initRouter()
 		else					dest = leader;
 		rtr_mc_set(e, MCPL_BLOCK_DONE, 0xFFFFFFFF, dest); e++;
 
-		// special for MCPL_BCAST_HOST_ACK
+		// special for MCPL_BCAST_SEND_RESULT
 		dest = leader;
 #ifdef USE_SPIN5
 		ushort d;	// distance
@@ -593,10 +599,10 @@ void initRouter()
 		}
 		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
 #else
-		if(sv->p2p_addr==0)
+		if(sv->p2p_addr==0 || sv->board_addr==0)
 			//dest += 1 + (1<<1) + (1<<2);
 			dest = 1 + (1<<1) + (1<<2);
-		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+		rtr_mc_set(e, MCPL_BCAST_SEND_RESULT, 0xFFFFFFFF, dest);
 #endif
 	}
 }
