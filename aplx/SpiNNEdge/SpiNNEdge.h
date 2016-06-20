@@ -26,6 +26,8 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
+#define SDP_TX_TIMEOUT          200
+
 #define TIMER_TICK_PERIOD_US 	1000000
 #define PRIORITY_TIMER			3
 #define PRIORITY_PROCESSING		2

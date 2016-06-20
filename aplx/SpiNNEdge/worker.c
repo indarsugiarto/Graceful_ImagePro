@@ -236,9 +236,9 @@ void imgDetection(uint arg0, uint arg1)
 	} // end of for all color channels
 
 	// clean-up memory in DTCM
-	sark_free(resImgBuf);  //resImgBuf = NULL;
-	sark_free(dtcmImgBuf); //dtcmImgBuf = NULL;
+    sark_free(resImgBuf);  //resImgBuf = NULL;
+    sark_free(dtcmImgBuf); //dtcmImgBuf = NULL; // -> this will create WDOG!!!
 	// at the end, send MCPL_EDGE_DONE
-	io_printf(IO_BUF, "Done edge detection!\n");
+    // io_printf(IO_BUF, "Done edge detection!\n");
 	spin1_send_mc_packet(MCPL_EDGE_DONE, 0, WITH_PAYLOAD);
 }

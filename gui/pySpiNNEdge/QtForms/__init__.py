@@ -11,6 +11,8 @@ import struct
 import socket
 import time
 
+from imgViewer import imgWidget, trxIndicator
+
 # Sobel operator
 """
  /* 3x3 GX Sobel mask.  Ref: www.cee.hw.ac.uk/hipr/html/sobel.html */
@@ -112,6 +114,7 @@ ASK_BLOCK_REPORT = 0
 class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     # The following signals MUST defined here, NOT in the init()
     sdpUpdate = QtCore.pyqtSignal('QByteArray')  # for streaming data
+    okToClose = True
     def __init__(self, def_image_dir = "./", parent=None):
         self.img_dir = def_image_dir
         self.img = None
@@ -119,6 +122,16 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.continyu = True
         super(edgeGUI, self).__init__(parent)
         self.setupUi(self)
+
+        self.orgViewPort = imgWidget("Original Image")
+        #self.orgViewPort.show()
+        self.resViewPort = imgWidget("Result SpiNNaker")
+        #self.resViewPort.show()
+        self.hostViewPort = imgWidget("Result PC-version")
+        #self.hostViewPort.show()
+
+        self.trx = trxIndicator()
+        #self.trx.show()
 
         self.connect(self.pbLoad, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbLoadClicked()"))
         self.connect(self.pbSend, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbSendClicked()"))
@@ -139,6 +152,18 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.tResult = [0,0,0]
 
         self.debugVal = 0
+        self.ResultTriggered = False
+
+    def closeEvent(self, event):
+        if self.okToClose:
+            self.orgViewPort.close()
+            self.resViewPort.close()
+            self.hostViewPort.close()
+            self.trx.close()
+            event.accept()
+        else:
+            event.ignore()
+
 
     def computeWLoad(self, nBlk, nCore):
         """
@@ -162,14 +187,35 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     @QtCore.pyqtSlot()
     def readRptSDP(self):
         # print "Got something..."
-        while self.RptSock.hasPendingDatagrams():
-            szData = self.RptSock.pendingDatagramSize()
-            datagram, host, port = self.RptSock.readDatagram(szData)
-            self.sdpUpdate.emit(datagram)   # for additional processing
-            # then call result retrieval processing
-            if szData > 10:
-                self.getImage(datagram)
-            else:   # if aplx only send header through this UDP port, then it's finish sign
+        if self.ResultTriggered is False:
+            self.ResultTriggered = True
+            self.trx.setName("Receiving image...")
+            self.trx.setVal(0)
+            self.trx.show()
+
+        #while self.RptSock.hasPendingDatagrams():
+        szData = self.RptSock.pendingDatagramSize()
+        datagram, host, port = self.RptSock.readDatagram(szData)
+        self.sdpUpdate.emit(datagram)   # for additional processing
+        # then call result retrieval processing
+        if szData > 10:
+            self.getImage(datagram)
+        else:   # if aplx only send header through this UDP port, then it's finish sign
+            if self.ProcessInProgress is False:
+                self.ProcessInProgress = True
+                print "SpiNNaker is starting the process...",
+                self.mn = time.localtime().tm_min
+                self.sc = time.localtime().tm_sec
+
+            else:
+                mn = time.localtime().tm_min
+                sc = time.localtime().tm_sec
+                elapse = (mn - self.mn) * 60 + sc - self.sc
+                print "done in {} secs!".format(elapse)
+                self.ResultTriggered = False
+                self.ProcessInProgress = False
+                self.trx.setVal(0)
+                self.trx.hide()
                 self.processResult()
 
     def initDbgSock(self, port):
@@ -298,13 +344,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         resultPixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
         resultPixmap.convertFromImage(imgResult)
-        #self.pixmap.load(self.fName) #pixmap.load() works just fine
-        self.resultScene.clear()
-        self.resultScene.addPixmap(resultPixmap)
-        self.resultScene.addText("Processed Image")
-        #self.resultScene.addItem(self.resultPixmap)
-        self.viewEdge.update()
-
+        self.resViewPort.setPixmap(resultPixmap)
+        self.resViewPort.show()
 
 
     def getImage(self, sdpData):
@@ -346,6 +387,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.res[rgb][lines]  = self.res[rgb][lines] + pixel
         # print "Got chunk from node-{}".format(blkID[0]-1)
         # then send acknowledge
+        self.trx.appendVal(len(pixel))
         self.sendAck(blkID[0])
 
     def sendAck(self, blkID):
@@ -379,20 +421,12 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.img32 = self.img.convertToFormat(QtGui.QImage.Format_RGB32)
 
         # Idea: use QImage for direct pixel manipulation and use QPixmap for rendering
-        self.pixmap = QtGui.QPixmap()
+        pixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
-        self.pixmap.convertFromImage(self.img32)
+        pixmap.convertFromImage(self.img32)
         #self.pixmap.load(self.fName) #pixmap.load() works just fine
-        self.scene = QtGui.QGraphicsScene()
-        self.scene.addPixmap(self.pixmap)
-        self.scene.addText("Original Image")
-        self.viewOrg.setScene(self.scene)
-        self.viewOrg.show()
-
-        # Prepare the resulting scene
-        self.resultScene = QtGui.QGraphicsScene()
-        self.viewEdge.setScene(self.resultScene)
-        self.viewEdge.show()
+        self.orgViewPort.setPixmap(pixmap)
+        self.orgViewPort.show()
 
         # Then create 3maps for each color. The sobel/laplace operators will operate on these maps
         self.rmap0 = [[0 for _ in range(self.w)] for _ in range(self.h)]    # the original
@@ -440,11 +474,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             self.sendBcastImg(exampleConf)
 
         # prepare the result
-        # self.res = [[0 for _ in range(self.w)] for _ in range(self.h)]
-        # let's save in a list of list of bytearray
         self.res = [[bytearray() for _ in range(self.h)] for _ in range(3)]
-
-
+        self.ProcessInProgress = False
 
     def sendBcastImg(self, blkDict):
         """
@@ -548,6 +579,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.sendImg(x, y)
 
     def sendImg(self, chipX, chipY):
+        self.trx.show()
+        self.trx.setName("Sending image...")
         # Cannot use self.sdpSender as the socket, since this sendImg() is blocking!
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -575,6 +608,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             for x in range(self.w):
                 rArray.append(self.rmap0[y][x])
 
+        self.szImg = len(rArray)
+        if self.isGray is True:
+            self.szImg *= 3
+        self.trx.setMaxVal(self.szImg)
+
+        pixelCntr = 0
+
         # third, iterate until all elements are sent
         # print "Sending R-channel",
         remaining = len(rArray)
@@ -582,6 +622,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         stopping = stepping
         starting = 0
         while remaining > 0:
+
             chunk = rArray[starting:stopping]
             ba = bytearray(chunk)
             """
@@ -595,8 +636,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
 
             # then waiting for a reply
-            # reply = sock.recv(1024)
             reply = sock.recv(1024)   # cannot use self.continyu in readRptSDP()
+
+            pixelCntr += len(ba)
+            self.trx.setVal(pixelCntr)
 
             remaining -= stepping
             starting = stopping
@@ -639,8 +682,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 sdp = pad + hdrg + ba
                 # self.continyu = False
                 self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-                # then waiting for a reply from green channel before go to blue one
+
                 reply = sock.recv(1024)
+                pixelCntr += len(ba)
+                self.trx.setVal(pixelCntr)
 
                 # repeat for the next chunk
                 remaining -= stepping
@@ -673,8 +718,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 sdp = pad + hdrb + ba
                 # self.continyu = False
                 self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
-                # again, wait for a reply from blue channel
+
                 reply = sock.recv(1024)
+                pixelCntr += len(ba)
+                self.trx.setVal(pixelCntr)
 
                 # repeat for the next chunk
                 remaining -= stepping
@@ -690,6 +737,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             # print "done!"
 
         sock.close()
+        self.trx.hide()
 
     @QtCore.pyqtSlot()
     def pbProcessClicked(self):
@@ -703,15 +751,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             self.newImg = self.doLaplace()
 
         #Then display it on the second graphicsView
-        self.resultPixmap = QtGui.QPixmap(self)
+        resultPixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
-        self.resultPixmap.convertFromImage(self.newImg)
+        resultPixmap.convertFromImage(self.newImg)
         #self.pixmap.load(self.fName) #pixmap.load() works just fine
-        self.resultScene.clear()
-        self.resultScene.addPixmap(self.resultPixmap)
-        self.resultScene.addText("Processed Image")
-        #self.resultScene.addItem(self.resultPixmap)
-        self.viewEdge.update()
+        self.hostViewPort.setPixmap(resultPixmap)
+        self.hostViewPort.show()
+
 
     @QtCore.pyqtSlot()
     def pbSaveClicked(self):
@@ -748,8 +794,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # clear
         self.img = None
         self.res = None
-        self.scene.clear()
-        self.resultScene.clear()
+        self.ResultTriggered = False
+        self.orgViewPort.hide()
+        self.resViewPort.hide()
+        self.hostViewPort.hide()
 
 
         #TODO: send notification to spinnaker that it is "clear"

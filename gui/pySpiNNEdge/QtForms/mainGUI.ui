@@ -6,38 +6,30 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>589</width>
-    <height>875</height>
+    <width>300</width>
+    <height>300</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>300</width>
+    <height>300</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>300</width>
+    <height>300</height>
+   </size>
   </property>
   <property name="windowTitle">
    <string>Simple Edge Detection</string>
   </property>
-  <widget class="QGraphicsView" name="viewOrg">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>451</width>
-     <height>431</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QGraphicsView" name="viewEdge">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>440</y>
-     <width>451</width>
-     <height>431</height>
-    </rect>
-   </property>
-  </widget>
   <widget class="QPushButton" name="pbLoad">
    <property name="geometry">
     <rect>
-     <x>470</x>
-     <y>20</y>
+     <x>20</x>
+     <y>10</y>
      <width>101</width>
      <height>29</height>
     </rect>
@@ -46,37 +38,11 @@
     <string>Load Image</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="pbProcess">
-   <property name="geometry">
-    <rect>
-     <x>470</x>
-     <y>210</y>
-     <width>101</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Process Image</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pbSave">
-   <property name="geometry">
-    <rect>
-     <x>470</x>
-     <y>250</y>
-     <width>101</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Save Image</string>
-   </property>
-  </widget>
   <widget class="QPushButton" name="pbSend">
    <property name="geometry">
     <rect>
-     <x>470</x>
-     <y>170</y>
+     <x>180</x>
+     <y>10</y>
      <width>101</width>
      <height>29</height>
     </rect>
@@ -88,9 +54,9 @@
   <widget class="QFrame" name="frame">
    <property name="geometry">
     <rect>
-     <x>460</x>
-     <y>60</y>
-     <width>121</width>
+     <x>10</x>
+     <y>50</y>
+     <width>281</width>
      <height>91</height>
     </rect>
    </property>
@@ -105,7 +71,7 @@
      <rect>
       <x>10</x>
       <y>60</y>
-      <width>94</width>
+      <width>171</width>
       <height>26</height>
      </rect>
     </property>
@@ -131,7 +97,7 @@
      <rect>
       <x>20</x>
       <y>20</y>
-      <width>78</width>
+      <width>161</width>
       <height>31</height>
      </rect>
     </property>
@@ -150,8 +116,8 @@
   <widget class="QPushButton" name="pbClear">
    <property name="geometry">
     <rect>
-     <x>470</x>
-     <y>290</y>
+     <x>180</x>
+     <y>160</y>
      <width>101</width>
      <height>29</height>
     </rect>
@@ -159,6 +125,61 @@
    <property name="text">
     <string>Clear</string>
    </property>
+  </widget>
+  <widget class="QFrame" name="frame_2">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>210</y>
+     <width>281</width>
+     <height>71</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Raised</enum>
+   </property>
+   <widget class="QLabel" name="label_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>0</y>
+      <width>91</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>For Python:</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pbProcess">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>30</y>
+      <width>101</width>
+      <height>29</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Process Image</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pbSave">
+    <property name="geometry">
+     <rect>
+      <x>150</x>
+      <y>30</y>
+      <width>101</width>
+      <height>29</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Save Result</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>

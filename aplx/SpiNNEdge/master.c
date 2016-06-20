@@ -10,7 +10,7 @@ void hTimer(uint tick, uint Unused)
 	// first-tick: populate workers
     if(tick==0) {
 		sark_delay_us(1000*sv->p2p_addr);
-		io_printf(IO_BUF, "Collecting worker IDs...\n");
+        io_printf(IO_BUF, "[SpiNNEdge] Collecting worker IDs...\n");
 		/* Initial process: broadcast info:
 		 * payload == 0 : ping
 		 * payload != 0 : location of block_info_t variable
@@ -20,8 +20,8 @@ void hTimer(uint tick, uint Unused)
 	}
 	// second tick: broadcast info to workers, assuming 1-sec is enough for ID collection
     else if(tick==1) {
-		sark_delay_us(1000*sv->p2p_addr);
-		io_printf(IO_BUF, "Distributing wIDs...\n");
+        //sark_delay_us(1000*sv->p2p_addr);
+        io_printf(IO_BUF, "[SpiNNEdge] Distributing wIDs...\n");
 		// payload.high = tAvailable, payload.low = wID
 		for(uint i= 1; i<workers.tAvailable; i++)
 			spin1_send_mc_packet(workers.wID[i], (workers.tAvailable << 16) + i, WITH_PAYLOAD);
@@ -148,8 +148,8 @@ void getImage(sdp_msg_t *msg, uint port)
 			// no need to include core ID, because only leadAp will do this!!!
 			checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG , (void *)imgIn,
 										  (void *)dtcmImgBuf, DMA_WRITE, dLen);
-			if(checkDMA==0)
-				io_printf(IO_BUF, "[Retrieving] DMA full! Retry!\n");
+            //if(checkDMA==0)
+            //	io_printf(IO_BUF, "[Retrieving] DMA full! Retry!\n");
 		} while(checkDMA==0);
 		// imgRIn += dLen; -> moved to hDMADone
 
@@ -185,8 +185,13 @@ void getImage(sdp_msg_t *msg, uint port)
 
 		// if grey or at the end of B image transmission, it should trigger processing
 		if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
-			if(sv->p2p_addr==0)
+            if(sv->p2p_addr==0) {
 				io_printf(IO_STD, "Image retrieved! Start processing!\n");
+                resultMsg.length = sizeof(sdp_hdr_t);   // send empty message
+                resultMsg.srce_port = myCoreID;
+                resultMsg.srce_addr = sv->p2p_addr;
+                spin1_send_sdp_msg(&resultMsg, 10);
+            }
 			spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
 		}
 
@@ -440,12 +445,12 @@ void sendResult(uint arg0, uint arg1)
 				//}
 
 				hostAck = 0;
-				spin1_send_sdp_msg(&resultMsg, 10);
+                spin1_send_sdp_msg(&resultMsg, 10);
 				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
 				//		  lines, c+1, resultMsg.tag);
 
 				//spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
-                spin1_delay_us(150);
+                spin1_delay_us(SDP_TX_TIMEOUT);
 
 				// send debugging via debugMsg
 
@@ -462,10 +467,9 @@ void sendResult(uint arg0, uint arg1)
 	// then send notification to chip<0,0> that my part is complete
 	spin1_send_mc_packet(MCPL_BLOCK_DONE, blkInfo->nodeBlockID, WITH_PAYLOAD);
 
-	io_printf(IO_BUF, "Got %d counter\n", ackCntr);
 	// release dtcm
 	sark_free(dtcmImgBuf);
-	// dtcmImgBuf = NULL;
+    dtcmImgBuf = NULL;
 }
 
 // afterEdgeDone() send the result to host?
@@ -474,8 +478,9 @@ void afterEdgeDone(uint arg0, uint arg1)
 	// io_printf(IO_STD, "Edge detection done!\n");
 
 	// since each chip holds a part of image data, it needs to send individually to host
-	if(blkInfo->nodeBlockID==0)	// trigger the chain
+    if(blkInfo->nodeBlockID==0)	{   // trigger the chain
 		spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+    }
 		// sendResult(0, 0);
 }
 
