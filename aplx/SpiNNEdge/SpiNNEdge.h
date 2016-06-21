@@ -1,5 +1,23 @@
+/* Version log
+ * 0.1 Initial version
+ * 0.2 GUI improvement
+ * 0.3 Including spin5
+ *
+ * TODO:
+ * - UDP communication is still troublesome:
+ *   1. IndexError: bytearray index out of range
+ *   2. too slow (due to delay)
+ *   3. How to solve SDP_TX_TIMEOUT?
+ * */
 #ifndef SPINNEDGE_H
 #define SPINNEDGE_H
+
+#define PROG_VERSION	0.3
+#define MAJOR_VERSION	0
+#define MINOR_VERSION	3
+
+//#define USE_SPIN3
+#define USE_SPIN5
 
 #include <spin1_api.h>
 
@@ -26,7 +44,7 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          200
+#define SDP_TX_TIMEOUT          150
 
 #define TIMER_TICK_PERIOD_US 	1000000
 #define PRIORITY_TIMER			3
@@ -164,9 +182,6 @@ uint szDMA;
 #define DMA_MOVE_IMG_G			0x47
 #define DMA_MOVE_IMG_B			0x42
 
-#define USE_SPIN3
-//#define USE_SPIN5
-
 uint myCoreID;
 w_info_t workers;
 block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
@@ -174,8 +189,11 @@ uchar nFiltJobDone;				// will be used to count how many workers have
 uchar nEdgeJobDone;				// finished their job in either filtering or edge detection
 uchar nBlockDone;
 chain_t *chips;					// list of chips in a chain for image loading
-uchar chainMode;
+uchar chainMode;				// 0=perchip, 1=use chain
 ushort ackCntr;
+
+volatile uint64 tic, toc;
+volatile ushort elapse;
 
 // Pelajaran hari ini: Jangan taruh static di sdp_msg_t, akibatnya
 // isi variabel jadi kacau. Mungkin karena ukuran memori statis di sark dibatasi?

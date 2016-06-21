@@ -28,27 +28,14 @@
   <widget class="QPushButton" name="pbLoad">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>10</y>
-     <width>101</width>
+     <x>10</x>
+     <y>160</y>
+     <width>81</width>
      <height>29</height>
     </rect>
    </property>
    <property name="text">
     <string>Load Image</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pbSend">
-   <property name="geometry">
-    <rect>
-     <x>180</x>
-     <y>10</y>
-     <width>101</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Send Image</string>
    </property>
   </widget>
   <widget class="QFrame" name="frame">
@@ -97,7 +84,7 @@
      <rect>
       <x>20</x>
       <y>20</y>
-      <width>161</width>
+      <width>131</width>
       <height>31</height>
      </rect>
     </property>
@@ -116,9 +103,9 @@
   <widget class="QPushButton" name="pbClear">
    <property name="geometry">
     <rect>
-     <x>180</x>
+     <x>210</x>
      <y>160</y>
-     <width>101</width>
+     <width>81</width>
      <height>29</height>
     </rect>
    </property>
@@ -180,6 +167,52 @@
      <string>Save Result</string>
     </property>
    </widget>
+  </widget>
+  <widget class="QPushButton" name="pbSend">
+   <property name="geometry">
+    <rect>
+     <x>110</x>
+     <y>160</y>
+     <width>81</width>
+     <height>29</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Send Image</string>
+   </property>
+  </widget>
+  <widget class="QComboBox" name="cbSpiNN">
+   <property name="geometry">
+    <rect>
+     <x>150</x>
+     <y>10</y>
+     <width>141</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <item>
+    <property name="text">
+     <string>SpiNN3</string>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>SpiNN5</string>
+    </property>
+   </item>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>23</x>
+     <y>14</y>
+     <width>121</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>SpiNNaker-board:</string>
+   </property>
   </widget>
  </widget>
  <resources/>

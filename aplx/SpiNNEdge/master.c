@@ -1,6 +1,5 @@
 #include "SpiNNEdge.h"
 
-
 /* TODO:
  * - We can use hTimer for pooling workers from time to time (to find out,
  *   which one is alive).
@@ -8,7 +7,8 @@
 void hTimer(uint tick, uint Unused)
 {
 	// first-tick: populate workers
-    if(tick==0) {
+	// don't start at tick-0 !!!!
+	if(tick==1) {
 		sark_delay_us(1000*sv->p2p_addr);
         io_printf(IO_BUF, "[SpiNNEdge] Collecting worker IDs...\n");
 		/* Initial process: broadcast info:
@@ -19,23 +19,31 @@ void hTimer(uint tick, uint Unused)
 		spin1_send_mc_packet(MCPL_BCAST_INFO_KEY, (uint)blkInfo, WITH_PAYLOAD);
 	}
 	// second tick: broadcast info to workers, assuming 1-sec is enough for ID collection
-    else if(tick==1) {
+	else if(tick==2) {
         //sark_delay_us(1000*sv->p2p_addr);
         io_printf(IO_BUF, "[SpiNNEdge] Distributing wIDs...\n");
 		// payload.high = tAvailable, payload.low = wID
 		for(uint i= 1; i<workers.tAvailable; i++)
 			spin1_send_mc_packet(workers.wID[i], (workers.tAvailable << 16) + i, WITH_PAYLOAD);
 	}
-    else if(tick==2) {
+	else if(tick==3) {
 		// debugging
 		printWID(0,0);
         //yang berikut akan menghasilkan "Chip-56320 ready!" --> Chip-56320 ???
         //io_printf(IO_STD, "Chip-%d ready!\n", blkInfo->nodeBlockID+1);
-        io_printf(IO_STD, "[SpiNNEdge] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
-                  CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+#ifdef USE_SPIN5
+		io_printf(IO_STD, "[SpiNN5-Edge-v%d.%d] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
+				  MAJOR_VERSION, MINOR_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+#else
+		io_printf(IO_STD, "[SpiNN3-Edge-v%d] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
+				  PROG_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+#endif
     }
 	else {
-
+/*
+		io_printf(IO_STD, "sv->clock_ms = %u\n", sv->clock_ms);
+		io_printf(IO_STD, "lagi, sv->clock_ms = %u\n", sv->clock_ms);
+*/
 	}
 }
 
@@ -78,8 +86,9 @@ void sendReply(uint arg0, uint arg1)
 	reportMsg.dest_port = PORT_ETH;
 	//reportMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
 	uint checkSDP = spin1_send_sdp_msg(&reportMsg, 10);
-	if(checkSDP == 0)
-		io_printf(IO_STD, "SDP fail!\n");
+	//spin1_delay_us(50);
+	//if(checkSDP == 0)
+	//	io_printf(IO_STD, "SDP fail!\n");
 }
 
 // since R,G and B channel processing are similar
@@ -95,16 +104,17 @@ void getImage(sdp_msg_t *msg, uint port)
 
 	// forward?
 	if(chainMode == 1 && sark_chip_id()==0) {
+		//io_printf(IO_BUF, "Forwarding to node ");
 		for(ushort i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
-			/*
-			io_printf(IO_BUF, "Forwarding to <%d,%d>:%d\n",
-					  chips[i].x, chips[i].y, chips[i].id);
-			*/
+			//io_printf(IO_BUF, "%d ", chips[i].id);
 			msg->dest_addr = (chips[i].x << 8) + chips[i].y;
-			msg->srce_addr = sv->p2p_addr;	// replace with my ID instead of ETH
-			msg->srce_port = myCoreID;
-			spin1_send_sdp_msg(msg, 10);
+			//msg->srce_addr = sv->p2p_addr;	// replace with my ID instead of ETH
+			//msg->srce_port = myCoreID;
+			uint checkSDP = spin1_send_sdp_msg(msg, 10);
+			//if(checkSDP==0)
+			//	io_printf(IO_STD, "SDP fail to sent!\n");
 		}
+		//io_printf(IO_BUF, "\n");
 	}
 
 	// get the image data from SCP+data_part
@@ -164,17 +174,17 @@ void getImage(sdp_msg_t *msg, uint port)
 		dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
 		switch(port) {
 		case SDP_PORT_R_IMG_DATA:
-			//io_printf(IO_STD, "layer-R is complete!\n");
+			io_printf(IO_BUF, "layer-R is complete!\n");
 			blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullRImageRetrieved = 1;
 			break;
 		case SDP_PORT_G_IMG_DATA:
-			//io_printf(IO_STD, "layer-G is complete!\n");
+			io_printf(IO_BUF, "layer-G is complete!\n");
 			blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullGImageRetrieved = 1;
 			break;
 		case SDP_PORT_B_IMG_DATA:
-			//io_printf(IO_STD, "layer-B is complete!\n");
+			io_printf(IO_BUF, "layer-B is complete!\n");
 			blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullBImageRetrieved = 1;
 			break;
@@ -186,7 +196,9 @@ void getImage(sdp_msg_t *msg, uint port)
 		// if grey or at the end of B image transmission, it should trigger processing
 		if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
             if(sv->p2p_addr==0) {
-				io_printf(IO_STD, "Image retrieved! Start processing!\n");
+				//io_printf(IO_STD, "Image retrieved! Start processing at %d!\n", sv->time_ms);
+				tic = sv->clock_ms;
+				io_printf(IO_STD, "Image retrieved! Start processing at %u!\n", tic);
                 resultMsg.length = sizeof(sdp_hdr_t);   // send empty message
                 resultMsg.srce_port = myCoreID;
                 resultMsg.srce_addr = sv->p2p_addr;
@@ -223,6 +235,10 @@ void hSDP(uint mBox, uint port)
 	sdp_msg_t *msg = (sdp_msg_t *)mBox;
 	// if host send SDP_CONFIG, means the image has been
 	// loaded into sdram via ybug operation
+	/*
+	if(msg->srce_addr==0)
+		io_printf(IO_BUF, "Got a forwarded packet from root\n");
+	*/
 	if(port==SDP_PORT_CONFIG) {
 		if(msg->cmd_rc == SDP_CMD_CONFIG || msg->cmd_rc == SDP_CMD_CONFIG_CHAIN) {
 			blkInfo->isGrey = msg->seq >> 8; //1=Grey, 0=color
@@ -249,7 +265,7 @@ void hSDP(uint mBox, uint port)
 				chainMode = 1;
 			else
 				chainMode = 0;
-			// should be propagated?
+			// is it use chain mechanism?
 			if(sark_chip_id() == 0 && chainMode==1) {
 				ushort i, x, y, id, maxBlock = blkInfo->maxBlock;
 				if(chips != NULL)
@@ -449,8 +465,8 @@ void sendResult(uint arg0, uint arg1)
 				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
 				//		  lines, c+1, resultMsg.tag);
 
-				//spin1_delay_us((1 + blkInfo->nodeBlockID)*500);
-                spin1_delay_us(SDP_TX_TIMEOUT);
+				//spin1_delay_us(SDP_TX_TIMEOUT);
+				spin1_delay_us(SDP_TX_TIMEOUT + blkInfo->maxBlock*10);
 
 				// send debugging via debugMsg
 
@@ -461,8 +477,8 @@ void sendResult(uint arg0, uint arg1)
 		}
 	} // end loop channel (rgb)
 
-    io_printf(IO_STD, "Block-%d done!\n", blkInfo->nodeBlockID);
-	io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
+	//io_printf(IO_STD, "Block-%d done!\n", blkInfo->nodeBlockID);
+	//io_printf(IO_BUF, "[Sending] pixels [%d,%d,%d] done!\n", total[0], total[1], total[2]);
 
 	// then send notification to chip<0,0> that my part is complete
 	spin1_send_mc_packet(MCPL_BLOCK_DONE, blkInfo->nodeBlockID, WITH_PAYLOAD);
@@ -480,6 +496,8 @@ void afterEdgeDone(uint arg0, uint arg1)
 	// since each chip holds a part of image data, it needs to send individually to host
     if(blkInfo->nodeBlockID==0)	{   // trigger the chain
 		spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+		toc = sv->clock_ms;
+		elapse = toc-tic;	// in milliseconds
     }
 		// sendResult(0, 0);
 }
@@ -517,8 +535,10 @@ void initSDP()
     debugMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
 
 	// prepare iptag?
+	/*
 	io_printf(IO_BUF, "reportMsg.tag = %d, resultMsg.tag = %d, debugMsg.tag = %d\n",
 			  reportMsg.tag, resultMsg.tag, debugMsg.tag);
+	*/
 }
 
 /* initRouter() initialize MCPL routing table by leadAp. Use two keys:
@@ -569,6 +589,23 @@ void initRouter()
 #ifdef USE_SPIN5
 		ushort d;	// distance
 		if(x==y) {
+			if(x!=7)
+				dest += 1 + (1 << 1) + (1 << 2);
+		}
+		else if(x>y) {
+			d = x - y;
+			if(y<4 && d<4)
+				dest += 1;
+			else if(x<7)
+				dest +=1;
+		}
+		else if(x<y) {
+			d = y - x;
+			if(d<3 && y<7)
+				dest += (1 << 2);
+		}
+		/*
+		if(x==y) {
 			switch(x){
 			//case 0:  dest += (1 << 1) + (1 << 2); break;
 			case 0:  dest = (1 << 1) + (1 << 2); break;
@@ -586,7 +623,8 @@ void initRouter()
 			if((x>0 && x < 5 && d<3) || (x=5 && y==6))
 				dest += (1 << 2);	// north
 		}
-		rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest);
+		*/
+		rtr_mc_set(e, MCPL_BCAST_SEND_RESULT, 0xFFFFFFFF, dest);
 #else
 		if(sv->p2p_addr==0 || sv->board_addr==0)
 			//dest += 1 + (1<<1) + (1<<2);
@@ -650,13 +688,22 @@ void printImgInfo(uint opType, uint None)
 		io_printf(IO_BUF, "for laplace with filtering\n");
 		break;
 	}
-	io_printf(IO_BUF, "nodeBlockID = %d with maxBlock = %d\n",
+	io_printf(IO_BUF, "nodeBlockID = %d with total Block = %d\n",
 			  blkInfo->nodeBlockID, blkInfo->maxBlock);
 	io_printf(IO_BUF, "Running in mode-%d\n", chainMode);
+	if(sv->p2p_addr==0 && chainMode==1) { // print chain
+		io_printf(IO_BUF, "Nodes info:\n--------------\n");
+		io_printf(IO_BUF, "Node-0 = chip<0,0>\n");
+		for(ushort i=0; i<blkInfo->maxBlock-1; i++) {
+			io_printf(IO_BUF, "Node-%d = chip<%d,%d>\n", chips[i].id, chips[i].x, chips[i].y);
+		}
+		io_printf(IO_BUF, "----------------\n");
+	}
 }
 
 void printWID(uint None, uint Neno)
 {
+	io_printf(IO_BUF, "Total workers = %d\n", workers.tAvailable);
 	for(uint i=0; i<workers.tAvailable; i++)
 		io_printf(IO_BUF, "wID-%d is core-%d\n", i, workers.wID[i]);
 }

@@ -3,6 +3,9 @@ The idea is:
 - Use QImage for direct pixel manipulation and use QPixmap for rendering
 - http://www.doc.gold.ac.uk/~mas02fl/MSC101/ImageProcess/edge.html
 """
+
+CPU_CLK = 3.2 * 1000
+
 from PyQt4 import Qt, QtGui, QtCore, QtNetwork
 import mainGUI
 import math
@@ -66,11 +69,24 @@ CHIP_LIST_48 = [[0,0],[1,0],[2,0],[3,0],[4,0],\
                             [2,5],[3,5],[4,5],[5,5],[6,5],[7,5],\
                                   [3,6],[4,6],[5,6],[6,6],[7,6],\
                                         [4,7],[5,7],[6,7],[7,7]]
+"""
+Today (21 June 11:47) I found that sdp chain is not working as expected. Some chips don't receive
+the packets. Weird! So, let's reduce the size:
+"""
+CHIP_LIST_15 = [[0,0],[1,0],[2,0],[3,0],[4,0],\
+                [0,1],[1,1],[2,1],[3,1],[4,1],\
+                [0,2],[1,2],[2,2],[3,2],[4,2]]
+
 CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
 spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
 #spin5 = CHIP_LIST_48
+spin5 = CHIP_LIST_15
+SPINN3_HOST = '192.168.240.253'
+SPINN5_HOST = '192.168.240.1'
 
-DEF_HOST = '192.168.240.253'
+# Which SpiNNaker board?
+spiNN = spin5
+
 DEF_SEND_PORT = 17893 #tidak bisa diganti dengan yang lain
 # in the aplx, it is defined:
 # define SDP_TAG_REPLY			1
@@ -138,6 +154,13 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.connect(self.pbProcess, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbProcessClicked()"))
         self.connect(self.pbSave, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbSaveClicked()"))
         self.connect(self.pbClear, QtCore.SIGNAL("clicked()"), QtCore.SLOT("pbClearClicked()"))
+        #self.connect(self.cbSpiNN, QtCore.SIGNAL("currentIndexChanged(int)")), QtCore.SLOT("cbSpiNNChanged(int)")
+        self.cbSpiNN.currentIndexChanged.connect(self.cbSpiNNChanged)
+
+        if spiNN==spin3:
+            self.cbSpiNN.setCurrentIndex(0)
+        else:
+            self.cbSpiNN.setCurrentIndex(1)
 
         # self.sdpUpdate can be connected to other slot
         # self.sdpUpdate.connect(SOME_OTHER_SLOT)
@@ -153,6 +176,15 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         self.debugVal = 0
         self.ResultTriggered = False
+
+    @QtCore.pyqtSlot(int)
+    def cbSpiNNChanged(self, idx):
+        if idx==0:
+            self.DEF_HOST = SPINN3_HOST
+            print "Will use Spin3"
+        else:
+            self.DEF_HOST = SPINN5_HOST
+            print "Will use Spin5"
 
     def closeEvent(self, event):
         if self.okToClose:
@@ -189,9 +221,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # print "Got something..."
         if self.ResultTriggered is False:
             self.ResultTriggered = True
-            self.trx.setName("Receiving image...")
-            self.trx.setVal(0)
-            self.trx.show()
+            #print "Getting result..."
+            #self.trx.setName("Receiving image...")
+            #self.trx.setVal(0)
+            #self.trx.show()
 
         #while self.RptSock.hasPendingDatagrams():
         szData = self.RptSock.pendingDatagramSize()
@@ -206,16 +239,23 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 print "SpiNNaker is starting the process...",
                 self.mn = time.localtime().tm_min
                 self.sc = time.localtime().tm_sec
+                self.clk = time.clock()
 
             else:
                 mn = time.localtime().tm_min
                 sc = time.localtime().tm_sec
-                elapse = (mn - self.mn) * 60 + sc - self.sc
-                print "done in {} secs!".format(elapse)
+                clk = time.clock()
+                #elapse = (mn - self.mn) * 60 + sc - self.sc
+                elapse = (clk - self.clk) * CPU_CLK
+
+                sa = datagram[8:10]
+                el = struct.unpack('H', sa)
+                #print "done in {} millisecs!".format(elapse)
+                print "done in {} millisecs!".format(el[0])
                 self.ResultTriggered = False
                 self.ProcessInProgress = False
-                self.trx.setVal(0)
-                self.trx.hide()
+                #self.trx.setVal(0)
+                #self.trx.hide()
                 self.processResult()
 
     def initDbgSock(self, port):
@@ -387,8 +427,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         self.res[rgb][lines]  = self.res[rgb][lines] + pixel
         # print "Got chunk from node-{}".format(blkID[0]-1)
         # then send acknowledge
-        self.trx.appendVal(len(pixel))
-        self.sendAck(blkID[0])
+        #self.trx.appendVal(len(pixel))
+        #self.sendAck(blkID[0])
 
     def sendAck(self, blkID):
         # Try with broadcasting method only
@@ -465,12 +505,18 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 self.sendImgPerChip(chip, 4)
         else:
             # TODO: how to broadcast data via scp? See TODO.FLOOD_FILL-howTo --> maybe NO, we use our own SDP
-            # exampleConf for spin3:
             exampleConf = dict()
-            exampleConf[0]=[0,0]
-            exampleConf[1]=[1,0]
-            exampleConf[2]=[0,1]
-            exampleConf[3]=[1,1]
+            if self.cbSpiNN.currentIndex()==0:
+                for i in range(len(spin3)):
+                    exampleConf[i] = spin3[i]
+                # exampleConf for spin3:
+                #exampleConf[0]=[0,0]
+                #exampleConf[1]=[1,0]
+                #exampleConf[2]=[0,1]
+                #exampleConf[3]=[1,1]
+            else:
+                for i in range(len(spin5)):
+                    exampleConf[i] = spin5[i]
             self.sendBcastImg(exampleConf)
 
         # prepare the result
@@ -522,7 +568,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         sdp = pad + hdrc + scp + ba
         udpSock = QtNetwork.QUdpSocket()
-        udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
         time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
 
@@ -570,7 +616,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         scp = struct.pack('2H3I',cmd,seq,arg1,arg2,arg3)   # arg3 is not used
         sdp = pad + hdrc + scp
-        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
         # this time, no need for reply
 
         time.sleep(1)   # wait a second
@@ -633,7 +679,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             """
             sdp = pad + hdrr + ba
             # self.continyu = False
-            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
             # then waiting for a reply
             reply = sock.recv(1024)   # cannot use self.continyu in readRptSDP()
@@ -650,9 +696,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         # fourth, send an empty data to signify end of image transfer
         sdp = pad + hdrr
-        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
         # print "done!"
 
+        time.sleep(0.5)
         # check if the image is gray, if not, then send the green and blue layers
         # NOTE: kalau diselang-seling G dengan B, menyebabkan aplx RTE
         if self.isGray is False:
@@ -681,7 +728,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 """
                 sdp = pad + hdrg + ba
                 # self.continyu = False
-                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
                 reply = sock.recv(1024)
                 pixelCntr += len(ba)
@@ -697,9 +744,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
             # finally, send an empty data to signify end of image transfer
             sdp = pad + hdrg
-            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
             # print "done!\nSending B-channel...",
 
+            time.sleep(0.5)
             # B-channel: iterate until all elements are sent
             remaining = len(bArray) #which is equal to len(bArray) as well
             stepping = 16+256   # initially, it's size is SCP+data_part
@@ -717,7 +765,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 """
                 sdp = pad + hdrb + ba
                 # self.continyu = False
-                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+                self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
                 reply = sock.recv(1024)
                 pixelCntr += len(ba)
@@ -733,7 +781,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
             # finally, send an empty data to signify end of image transfer
             sdp = pad + hdrb
-            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+            self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
             # print "done!"
 
         sock.close()
@@ -945,7 +993,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             sdp = pad + hdr + scp
 
         CmdSock = QtNetwork.QUdpSocket()
-        CmdSock.writeDatagram(sdp, QtNetwork.QHostAddress(DEF_HOST), DEF_SEND_PORT)
+        CmdSock.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
         CmdSock.flush()
         return sdp
 
