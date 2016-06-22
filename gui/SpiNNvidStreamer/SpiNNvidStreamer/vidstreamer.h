@@ -8,6 +8,7 @@
 
 #include "cdecoder.h"
 #include "cscreen.h"
+#include "cspinncomm.h"
 
 namespace Ui {
 class vidStreamer;
@@ -27,6 +28,7 @@ public:
     QTimer *refresh;
 	cScreen *screen;
 	cScreen *edge;
+    cSpiNNcomm *spinn;
 
 public slots:
     void errorString(QString err);
@@ -35,10 +37,11 @@ public slots:
     void refreshUpdate();
 	void videoFinish();
 	void setSize(int w, int h);
+    void configSpin(int w, int h);
 
 private:
+    bool isPaused;
     Ui::vidStreamer *ui;
-	bool isPaused;
 protected:
 	void closeEvent(QCloseEvent *event);
 };

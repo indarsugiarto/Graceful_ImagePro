@@ -11,11 +11,16 @@ vidStreamer::vidStreamer(QWidget *parent) :
     ui(new Ui::vidStreamer)
 {
     ui->setupUi(this);
-	connect(ui->pbLoad, SIGNAL(pressed()), this, SLOT(pbLoadClicked()));
-	connect(ui->pbPause, SIGNAL(pressed()), this, SLOT(pbPauseClicked()));
     refresh = new QTimer(this);
-	screen = new cScreen();
-	edge = new cScreen();
+    screen = new cScreen();
+    edge = new cScreen();
+    spinn = new cSpiNNcomm();
+    spinn->setHost(ui->cbSpiNN->currentIndex());
+
+    connect(ui->pbLoad, SIGNAL(pressed()), this, SLOT(pbLoadClicked()));
+	connect(ui->pbPause, SIGNAL(pressed()), this, SLOT(pbPauseClicked()));
+    connect(ui->cbSpiNN, SIGNAL(currentIndexChanged(int)), spinn,
+            SLOT(setHost(int)));
 
 	refresh->setInterval(40);   // which produces roughly 25fps
 	//refresh->setInterval(1000);   // which produces roughly 25fps
@@ -39,6 +44,7 @@ void vidStreamer::pbPauseClicked()
 
 vidStreamer::~vidStreamer()
 {
+    delete spinn;
 	delete edge;
 	delete screen;
     delete ui;
@@ -102,4 +108,10 @@ void vidStreamer::videoFinish()
 	refresh->stop();
 	screen->hide();
 	edge->hide();
+}
+
+// tell SpiNNaker to compute workload
+void vidStreamer::configSpin(int w, int h)
+{
+
 }
