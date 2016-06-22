@@ -31,12 +31,14 @@ public:
 public slots:
     void errorString(QString err);
     void pbLoadClicked();
+	void pbPauseClicked();
     void refreshUpdate();
 	void videoFinish();
 	void setSize(int w, int h);
 
 private:
     Ui::vidStreamer *ui;
+	bool isPaused;
 protected:
 	void closeEvent(QCloseEvent *event);
 };

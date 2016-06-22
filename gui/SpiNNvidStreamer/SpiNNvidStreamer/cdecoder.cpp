@@ -1,7 +1,8 @@
 #include "cdecoder.h"
 #include <QDebug>
+#include <QCoreApplication>
 
-cDecoder::cDecoder(QObject *parent) : QObject(parent)
+cDecoder::cDecoder(QObject *parent) : QObject(parent), go(true)
 {
     cntr = 0;
 	testCntr = 0;
@@ -106,9 +107,11 @@ void cDecoder::started()
     isStopped = false;
 
 	while(!isStopped) {
-		cntr++;
-		if(cntr==9999999) {
-			//qDebug() << QString("%1").arg(testCntr); testCntr++;
+		//cntr++;
+		//if(cntr==9999999)
+		if(go)
+		{
+			//qDebug() << QString("Decode...");
 			// Read frames
 			if(av_read_frame(is->pFormatCtx, &packet)>=0) {
 				// Is this a packet from the video stream?
@@ -134,13 +137,21 @@ void cDecoder::started()
 						// Publish the result
 						frame = getFrame();
 						emit newFrame(frame);
+						go = false;
+
+						// wait until refresh timer fire-up
 					}
 				}
 			}
 			else {
 				isStopped = true;
-			}
-		cntr = 0;
+			}		
+		}
+		else {
+			cntr++;
+//			if(cntr==99999999)
+//				qDebug() << "tick...";
+			QCoreApplication::processEvents();
 		}
 	}
 
@@ -169,4 +180,10 @@ QImage cDecoder::getFrame() {
 	for(int y=0;y<h;y++)
 		memcpy(frame.scanLine(y),pFrameRGB->data[0]+y*pFrameRGB->linesize[0],w*3);
 	return frame;
+}
+
+void cDecoder::refresh()
+{
+	go = true;
+	//qDebug() << "go...";
 }

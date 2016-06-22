@@ -26,8 +26,17 @@ cScreen::~cScreen()
 }
 
 
+void cScreen::drawFrame()
+{
+	QPixmap pixmap;
+	pixmap.convertFromImage(frame);
+	scene->clear();
+	scene->addPixmap(pixmap);
+}
+
 void cScreen::putFrame(const QImage &frameku)
 {
+	//frame = frameku;
 	QPixmap pixmap;
 	pixmap.convertFromImage(frameku);
 	scene->clear();

@@ -7,19 +7,35 @@
 
 vidStreamer::vidStreamer(QWidget *parent) :
     QWidget(parent),
+	isPaused(false),
     ui(new Ui::vidStreamer)
 {
     ui->setupUi(this);
-    connect(ui->pbLoad, SIGNAL(clicked()), this, SLOT(pbLoadClicked()));
+	connect(ui->pbLoad, SIGNAL(pressed()), this, SLOT(pbLoadClicked()));
+	connect(ui->pbPause, SIGNAL(pressed()), this, SLOT(pbPauseClicked()));
     refresh = new QTimer(this);
 	screen = new cScreen();
 	edge = new cScreen();
 
-    refresh->setInterval(40);   // which produces roughly 25fps
-    connect(refresh, SIGNAL(timeout()), this, SLOT(refreshUpdate()));
+	refresh->setInterval(40);   // which produces roughly 25fps
+	//refresh->setInterval(1000);   // which produces roughly 25fps
+	refresh->start();
+	//connect(refresh, SIGNAL(timeout()), this, SLOT(refreshUpdate()));
 }
 
-
+void vidStreamer::pbPauseClicked()
+{
+	if(isPaused==false) {
+		ui->pbPause->setText("Run");
+		isPaused = true;
+		refresh->stop();
+	}
+	else {
+		ui->pbPause->setText("Pause");
+		isPaused = false;
+		refresh->start();
+	}
+}
 
 vidStreamer::~vidStreamer()
 {
@@ -51,15 +67,17 @@ void vidStreamer::pbLoadClicked()
 	connect(decoder, SIGNAL(newFrame(const QImage &)), screen, SLOT(putFrame(const QImage &)));
 	connect(decoder, SIGNAL(gotPicSz(int,int)), this, SLOT(setSize(int,int)));
 	connect(decoder, SIGNAL(finished()), this, SLOT(videoFinish()));
+	connect(refresh, SIGNAL(timeout()), decoder, SLOT(refresh()));
 
 	decoder->filename = fName;
 	worker->start();
-    refresh->start();
+	//refresh->start();
 }
 
 void vidStreamer::refreshUpdate()
 {
-
+	screen->drawFrame();
+	edge->drawFrame();
 }
 
 void vidStreamer::setSize(int w, int h)

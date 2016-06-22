@@ -23,6 +23,7 @@ public:
 	QImage frame;
 	int w;
 	int h;
+	volatile bool	go;
 
 signals:
     void finished();
@@ -32,6 +33,7 @@ signals:
 
 public slots:
     void started(); // thread loop is in here
+	void refresh();
 private:
     int cntr;
 	int testCntr;

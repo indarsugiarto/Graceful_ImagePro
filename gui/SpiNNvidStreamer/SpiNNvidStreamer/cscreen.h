@@ -15,11 +15,13 @@ public:
 	~cScreen();
 	QGraphicsView *viewPort;
 	QGraphicsScene *scene;
+	QImage frame;
 signals:
 
 public slots:
 	void setSize(int w, int h);
 	void putFrame(const QImage &frame);
+	void drawFrame();
 };
 
 #endif // CSCREEN_H
