@@ -26,12 +26,14 @@ public:
     QString fName;
     QTimer *refresh;
 	cScreen *screen;
+	cScreen *edge;
 
 public slots:
     void errorString(QString err);
     void pbLoadClicked();
     void refreshUpdate();
 	void videoFinish();
+	void setSize(int w, int h);
 
 private:
     Ui::vidStreamer *ui;

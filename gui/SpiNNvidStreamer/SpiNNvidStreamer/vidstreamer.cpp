@@ -13,6 +13,7 @@ vidStreamer::vidStreamer(QWidget *parent) :
     connect(ui->pbLoad, SIGNAL(clicked()), this, SLOT(pbLoadClicked()));
     refresh = new QTimer(this);
 	screen = new cScreen();
+	edge = new cScreen();
 
     refresh->setInterval(40);   // which produces roughly 25fps
     connect(refresh, SIGNAL(timeout()), this, SLOT(refreshUpdate()));
@@ -22,6 +23,7 @@ vidStreamer::vidStreamer(QWidget *parent) :
 
 vidStreamer::~vidStreamer()
 {
+	delete edge;
 	delete screen;
     delete ui;
 }
@@ -47,7 +49,7 @@ void vidStreamer::pbLoadClicked()
 	connect(decoder, SIGNAL(finished()), decoder, SLOT(deleteLater()));
 	connect(worker, SIGNAL(finished()), worker, SLOT(deleteLater()));
 	connect(decoder, SIGNAL(newFrame(const QImage &)), screen, SLOT(putFrame(const QImage &)));
-	connect(decoder, SIGNAL(gotPicSz(int,int)), screen, SLOT(setSize(int,int)));
+	connect(decoder, SIGNAL(gotPicSz(int,int)), this, SLOT(setSize(int,int)));
 	connect(decoder, SIGNAL(finished()), this, SLOT(videoFinish()));
 
 	decoder->filename = fName;
@@ -60,11 +62,19 @@ void vidStreamer::refreshUpdate()
 
 }
 
+void vidStreamer::setSize(int w, int h)
+{
+	screen->setSize(w,h);
+	edge->setGeometry(edge->x()+w,edge->y(),w,h);
+	edge->setSize(w,h);
+}
+
 void vidStreamer::closeEvent(QCloseEvent *event)
 {
 	refresh->stop();
 	worker->quit();
 	screen->close();
+	edge->close();
 	event->accept();
 }
 
@@ -73,4 +83,5 @@ void vidStreamer::videoFinish()
 	worker->quit();
 	refresh->stop();
 	screen->hide();
+	edge->hide();
 }
