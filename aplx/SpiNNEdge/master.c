@@ -33,10 +33,12 @@ void hTimer(uint tick, uint Unused)
         //io_printf(IO_STD, "Chip-%d ready!\n", blkInfo->nodeBlockID+1);
 #ifdef USE_SPIN5
 		io_printf(IO_STD, "[SpiNN5-Edge-v%d.%d] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
-				  MAJOR_VERSION, MINOR_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+				  MAJOR_VERSION, MINOR_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr),
+				  sark_core_id());
 #else
-		io_printf(IO_STD, "[SpiNN3-Edge-v%d] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
-				  PROG_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr), sark_core_id());
+		io_printf(IO_STD, "[SpiNN3-Edge-v%d.%d] Chip<%d,%d> ready! LeadAp running @ core-%d\n",
+				  MAJOR_VERSION, MINOR_VERSION, CHIP_X(sv->p2p_addr), CHIP_Y(sv->p2p_addr),
+				  sark_core_id());
 #endif
     }
 	else {

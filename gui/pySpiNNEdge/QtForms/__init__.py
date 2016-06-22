@@ -6,6 +6,8 @@ The idea is:
 
 CPU_CLK = 3.2 * 1000
 
+UDP_BUFF_SIZE = 2048
+
 from PyQt4 import Qt, QtGui, QtCore, QtNetwork
 import mainGUI
 import math
@@ -233,6 +235,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # then call result retrieval processing
         if szData > 10:
             self.getImage(datagram)
+            #print "{}:{}".format(self.pktCntr, szData)    # lihat, berapa byte yang dikirim
+            #self.pktCntr += 1
         else:   # if aplx only send header through this UDP port, then it's finish sign
             if self.ProcessInProgress is False:
                 self.ProcessInProgress = True
@@ -498,6 +502,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         if self.img is None:
             return
 
+        self.pktCntr = 1
         if SEND_METHOD==0:
             # Experiment: use 4 chips:
             for chip in range(4):
@@ -682,7 +687,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
             # then waiting for a reply
-            reply = sock.recv(1024)   # cannot use self.continyu in readRptSDP()
+            reply = sock.recv(UDP_BUFF_SIZE)   # cannot use self.continyu in readRptSDP()
 
             pixelCntr += len(ba)
             self.trx.setVal(pixelCntr)
@@ -730,7 +735,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 # self.continyu = False
                 self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
-                reply = sock.recv(1024)
+                reply = sock.recv(UDP_BUFF_SIZE)
                 pixelCntr += len(ba)
                 self.trx.setVal(pixelCntr)
 
@@ -767,7 +772,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 # self.continyu = False
                 self.sdpSender.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
-                reply = sock.recv(1024)
+                reply = sock.recv(UDP_BUFF_SIZE)
                 pixelCntr += len(ba)
                 self.trx.setVal(pixelCntr)
 

@@ -8,6 +8,18 @@
  *   1. IndexError: bytearray index out of range
  *   2. too slow (due to delay)
  *   3. How to solve SDP_TX_TIMEOUT?
+ *
+ * Catatanku:
+ * - Masalah dengan teknik handshaking:
+ *   Misalkan saat yang kirim adalah chip<0,0>, maka tidak bisa bisa kirim reply ke chip<0,0>
+ *   karena dia sibuk. Terpaksa kirim ke chip yang lain (misal chip<1,1>), dan chip<1,1> tersebut
+ *   akan kirim MCPL yang menandai ada kiriman reply. Masalahnya, ketika tiba waktunya
+ *   chip<1,1>, maka handshaking harus dihandle yang lain (misal chip<0,0>), dan ini agak
+ *   merepotkan programmingnya.
+ * - Aku coba hitung berapa paket yang dikirim saat SDP_TX_TIMEOUT==0
+ *   dan ternyata memang ada beberapa paket yang di-drop. Dalam kondisi normal,
+ *   paket yang terkirim akan selang-seling 282-86, tapi saat SDP_TX_TIMEOUT==0.
+ *   paket yang terkirim jadi kacau (tidak selalu urut 282-86).
  * */
 #ifndef SPINNEDGE_H
 #define SPINNEDGE_H
@@ -16,8 +28,8 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	3
 
-//#define USE_SPIN3
-#define USE_SPIN5
+#define USE_SPIN3
+//#define USE_SPIN5
 
 #include <spin1_api.h>
 
@@ -44,7 +56,8 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          150
+#define SDP_TX_TIMEOUT          200
+//#define SDP_TX_TIMEOUT          0
 
 #define TIMER_TICK_PERIOD_US 	1000000
 #define PRIORITY_TIMER			3
