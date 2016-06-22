@@ -47,5 +47,11 @@ void cScreen::setSize(int w, int h){
 	viewPort->setGeometry(0,0,w,h);
 	this->setGeometry(x(), y(), w, h);
 	this->show();
+	imgW = w;
+	imgH = h;
 }
 
+void cScreen::getImgSpiNN(const QByteArray &data)
+{
+	// collect data before constructing QImage from data
+}

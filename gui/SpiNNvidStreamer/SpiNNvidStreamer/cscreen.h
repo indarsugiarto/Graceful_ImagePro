@@ -22,6 +22,10 @@ public slots:
 	void setSize(int w, int h);
 	void putFrame(const QImage &frame);
 	void drawFrame();
+	void getImgSpiNN(const QByteArray &data);
+private:
+	int imgW;
+	int imgH;
 };
 
 #endif // CSCREEN_H

@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui
+QT       += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -15,12 +15,14 @@ TEMPLATE = app
 SOURCES += main.cpp\
         vidstreamer.cpp \
     cdecoder.cpp \
-    cscreen.cpp
+    cscreen.cpp \
+    cspinncomm.cpp
 
 HEADERS  += vidstreamer.h \
     cdecoder.h \
     viddef.h \
-    cscreen.h
+    cscreen.h \
+    cspinncomm.h
 
 FORMS    += vidstreamer.ui
 
