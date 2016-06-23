@@ -89,8 +89,10 @@ void vidStreamer::refreshUpdate()
 void vidStreamer::setSize(int w, int h)
 {
 	screen->setSize(w,h);
-	edge->setGeometry(edge->x()+w,edge->y(),w,h);
+    edge->setGeometry(edge->x()+w+20,edge->y(),w,h);
 	edge->setSize(w,h);
+    // then tell spinnaker to start initialization
+    spinn->configSpin(ui->cbSpiNN->currentIndex(), w, h);
 }
 
 void vidStreamer::closeEvent(QCloseEvent *event)
@@ -108,10 +110,4 @@ void vidStreamer::videoFinish()
 	refresh->stop();
 	screen->hide();
 	edge->hide();
-}
-
-// tell SpiNNaker to compute workload
-void vidStreamer::configSpin(int w, int h)
-{
-
 }

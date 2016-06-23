@@ -5,13 +5,6 @@
 #include <QUdpSocket>
 #include <QHostAddress>
 
-// TODO: the following X_CHIPS and Y_CHIPS should be configurable
-// but now, let's make it convenient
-ushort X_CHIPS[48] = {0,1,0,1,2,3,4,2,3,4,5,0,1,2,3,4,5,6,0,1,2,3,4,5,6,7,
-                      1,2,3,4,5,6,7,2,3,4,5,6,7,3,4,5,6,7,4,5,6,7};
-ushort Y_CHIPS[48] = {0,0,1,1,0,0,0,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,
-                      4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,7,7,7,7};
-
 #define SPIN3       0
 #define SPIN5       1
 #define SPIN3_IP    "192.168.240.253"
@@ -94,7 +87,8 @@ private:
     uchar sdpImgGreenPort;          // = 2
     uchar sdpImgBluePort;           // = 3
     uchar sdpImgConfigPort;         // = 7
-
+    static uchar X_CHIPS[48];       // must be static, otherwise it'll raise
+    static uchar Y_CHIPS[48];       // is not a static data member of cSpiNNcomm
     void sendSDP(sdp_hdr_t h, QByteArray s, QByteArray d);
     // helper functions:
     QByteArray hdr(sdp_hdr_t h);

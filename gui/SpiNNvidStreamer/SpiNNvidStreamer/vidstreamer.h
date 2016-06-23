@@ -37,7 +37,6 @@ public slots:
     void refreshUpdate();
 	void videoFinish();
 	void setSize(int w, int h);
-    void configSpin(int w, int h);
 
 private:
     bool isPaused;

@@ -1,6 +1,13 @@
 #include "cspinncomm.h"
 #include <QHostAddress>
 
+// TODO: the following X_CHIPS and Y_CHIPS should be configurable
+// but now, let's make it convenient
+uchar cSpiNNcomm::X_CHIPS[48] = {0,1,0,1,2,3,4,2,3,4,5,0,1,2,3,4,5,6,0,1,2,3,4,5,
+                                 6,7,1,2,3,4,5,6,7,2,3,4,5,6,7,3,4,5,6,7,4,5,6,7};
+uchar cSpiNNcomm::Y_CHIPS[48] = {0,0,1,1,0,0,0,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,3,
+                                 3,3,4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,7,7,7,7};
+
 cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
 {
     // initialize nodes
@@ -9,6 +16,7 @@ cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
         nodes[i].chipX = X_CHIPS[i];
         nodes[i].chipY = Y_CHIPS[i];
     }
+    // create sockets
     sdpReply = new QUdpSocket();
     sdpResult = new QUdpSocket();
     sdpDebug = new QUdpSocket();
@@ -16,6 +24,7 @@ cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
 	sdpReply->bind(SDP_REPLY_PORT);
 	sdpResult->bind(SDP_RESULT_PORT);
 	sdpDebug->bind(SDP_DEBUG_PORT);
+    // handle/prepare callbacks
 	connect(sdpReply, SIGNAL(readyRead()), this, SLOT(readReply()));
 	connect(sdpResult, SIGNAL(readyRead()), this, SLOT(readResult()));
 	connect(sdpDebug, SIGNAL(readyRead()), this, SLOT(readDebug()));
@@ -63,7 +72,9 @@ void cSpiNNcomm::readResult()
 }
 
 // configure SpiNNaker to calculate workloads
+// it should be called when cDecoder first detect the resolution
 void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
+// @slot
 {
     sdp_hdr_t h;
     h.flags = 0x07;
@@ -77,12 +88,15 @@ void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
     c.cmd_rc = SDP_CMD_CONFIG_CHAIN;
     c.seq = OP_SOBEL_NO_FILTER;    // edge-proc sobel, no filtering
     c.arg1 = (imgW << 16) + imgH;
+    // ushort rootNode = 0;
+    // ushort nNodes = spinIDX == 0 ? 4 : MAX_CHIPS;
+    // c.arg2 = (rootNode << 16) + nNodes;
     c.arg2 = spinIDX==0?4:MAX_CHIPS;    // spin3 or spin5
     c.arg3 = BLOCK_REPORT_NO;
 
     // build the node list
     QByteArray nodeList;
-    // here, we make chip<0,0> as the root, hence we start from 1
+    // here, we make chip<0,0> as the rootNode, hence we start from 1
     for(ushort i=1; i<c.arg2; i++) {
         nodeList.append((char)nodes[i].chipX);
         nodeList.append((char)nodes[i].chipY);
