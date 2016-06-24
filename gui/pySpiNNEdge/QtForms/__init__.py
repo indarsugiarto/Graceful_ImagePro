@@ -797,12 +797,14 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         if self.img is None:
             return
-
+        tic = time.time()
         if self.cbMode.currentIndex() == 0:
             self.newImg = self.doSobel()
         elif self.cbMode.currentIndex()==1:
             self.newImg = self.doLaplace()
-
+        toc = time.time()
+        elapse = int((toc-tic)*1000)
+        print "Processing time = {}-ms".format(elapse)
         #Then display it on the second graphicsView
         resultPixmap = QtGui.QPixmap()
         #self.pixmap.fromImage(self.img)    #something not right with this fromImage() function
