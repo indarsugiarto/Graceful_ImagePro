@@ -4,8 +4,6 @@ The idea is:
 - http://www.doc.gold.ac.uk/~mas02fl/MSC101/ImageProcess/edge.html
 """
 
-CPU_CLK = 3.2 * 1000
-
 UDP_BUFF_SIZE = 2048
 
 from PyQt4 import Qt, QtGui, QtCore, QtNetwork
@@ -83,11 +81,13 @@ CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
 spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
 #spin5 = CHIP_LIST_48
 spin5 = CHIP_LIST_15
+#SPINN3_HOST = '192.168.240.1'
 SPINN3_HOST = '192.168.240.253'
 SPINN5_HOST = '192.168.240.1'
 
 # Which SpiNNaker board?
-spiNN = spin5
+# spiNN = spin5
+spiNN = spin3
 
 DEF_SEND_PORT = 17893 #tidak bisa diganti dengan yang lain
 # in the aplx, it is defined:
@@ -163,7 +163,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             self.cbSpiNN.setCurrentIndex(0)
         else:
             self.cbSpiNN.setCurrentIndex(1)
-
+        self.cbSpiNNChanged(self.cbSpiNN.currentIndex())
         # self.sdpUpdate can be connected to other slot
         # self.sdpUpdate.connect(SOME_OTHER_SLOT)
 
@@ -223,12 +223,12 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # print "Got something..."
         if self.ResultTriggered is False:
             self.ResultTriggered = True
+            #self.pktCntr = 1
             #print "Getting result..."
             #self.trx.setName("Receiving image...")
             #self.trx.setVal(0)
             #self.trx.show()
 
-        #while self.RptSock.hasPendingDatagrams():
         szData = self.RptSock.pendingDatagramSize()
         datagram, host, port = self.RptSock.readDatagram(szData)
         self.sdpUpdate.emit(datagram)   # for additional processing
@@ -241,16 +241,12 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             if self.ProcessInProgress is False:
                 self.ProcessInProgress = True
                 print "SpiNNaker is starting the process...",
-                self.mn = time.localtime().tm_min
-                self.sc = time.localtime().tm_sec
-                self.clk = time.clock()
+                self.tic = time.time()
 
             else:
-                mn = time.localtime().tm_min
-                sc = time.localtime().tm_sec
-                clk = time.clock()
+                self.toc = time.time()
                 #elapse = (mn - self.mn) * 60 + sc - self.sc
-                elapse = (clk - self.clk) * CPU_CLK
+                elapse = int((self.toc - self.tic)*1000)
 
                 sa = datagram[8:10]
                 el = struct.unpack('H', sa)

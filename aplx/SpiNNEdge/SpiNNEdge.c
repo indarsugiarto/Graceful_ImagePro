@@ -11,6 +11,7 @@ void hDMADone(uint tid, uint tag)
 		case SDP_PORT_G_IMG_DATA: blkInfo->imgGIn += dLen; break;
 		case SDP_PORT_B_IMG_DATA: blkInfo->imgBIn += dLen; break;
 		}
+        //io_printf(IO_BUF, "dma dLen = %d\n", dLen);
 	}
 	else if((tag & 0xFFFF) == DMA_FETCH_IMG_TAG) {
 		//io_printf(IO_BUF, "dma tag = 0x%x\n", tag);
@@ -34,7 +35,10 @@ void notifyHostDone(uint arg0, uint arg1)
 
 void hMCPL(uint key, uint payload)
 {
-	if(key==MCPL_BCAST_INFO_KEY) {
+	// NOTE: DON'T DO io_printf() here!!!!!
+	// io_printf(IO_BUF, "Got key-0x%x, payload-0x%x\n", key, payload);
+    //------------------------ this is worker part --------------------------
+    if(key==MCPL_BCAST_INFO_KEY) {
 		// leadAp sends "0" for ping, worker replys with its core
 		if(payload==0)
 			spin1_send_mc_packet(MCPL_PING_REPLY, myCoreID, WITH_PAYLOAD);
@@ -87,7 +91,28 @@ void hMCPL(uint key, uint payload)
 		else if(blkInfo->nodeBlockID==0) {
 			spin1_send_mc_packet(MCPL_BCAST_SEND_RESULT, ++payload, WITH_PAYLOAD);
 		}
-
+	}
+    // MCPL_BCAST_IMG_READY should be put prior to the other pixel-related keys
+    else if(key == MCPL_BCAST_IMG_READY) {
+        spin1_schedule_callback(afterCollectPixel, payload, 0, PRIORITY_PROCESSING);
+    }
+	//else if((key >> 4) == 0x0bca5fff) {
+	else if((key & 0xFFFF0000) == MCPL_BCAST_PIXEL_BASE) {	// because pixel index is carried on in the key
+		if((key & 1) == 0) {
+			spin1_schedule_callback(collectPixel, key, payload, PRIORITY_PROCESSING);
+		}
+		else {
+			//io_printf(IO_BUF, "Got pixel-%d: 0x%x\n", (key >> 4) & 0xfff, payload);
+			// we put the index in the key as well
+			pixelCntr = (key >> 4) & 0xfff;
+			//sark_mem_cpy((void *)&pixelBuffer[pixelCntr], (void *)&payload, sizeof(uint));
+			pixelBuffer[pixelCntr] = payload;
+			//pixelCntr++;
+			// check if "END-transmission" is sent
+		}
+    }
+	else {
+		io_printf(IO_BUF, "Got key-0x%x, payload-0x%x\n", key, payload);
 	}
 }
 
@@ -101,6 +126,7 @@ void c_main()
 	// only leadAp has access to dma and sdp
 	if(leadAp) {
 
+		io_printf(IO_BUF, "My p2paddr = %d\n", sv->p2p_addr);
 		// the danger of sdp_msg_t * without initialization is...
 		/*
 		reportMsg = sark_alloc(1, sizeof(sdp_msg_t));
@@ -109,10 +135,10 @@ void c_main()
 		*/
 
 		// prepare chip-level image block information
-        blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
-                              sark_app_id(), ALLOC_LOCK);
-        //blkInfo = sark_xalloc(sv->sdram_heap, sizeof(block_info_t),
-        //							  sark_app_id(), ALLOC_LOCK);
+		//blkInfo = sark_xalloc(sv->sysram_heap, sizeof(block_info_t),
+		//                      sark_app_id(), ALLOC_LOCK);
+		blkInfo = sark_xalloc(sv->sdram_heap, sizeof(block_info_t),
+									  sark_app_id(), ALLOC_LOCK);
 		if(blkInfo==NULL) {
 			io_printf(IO_BUF, "blkInfo alloc error!\n");
 			rt_error(RTE_ABORT);

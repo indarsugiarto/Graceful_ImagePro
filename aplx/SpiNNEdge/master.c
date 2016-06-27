@@ -87,7 +87,7 @@ void sendReply(uint arg0, uint arg1)
 	reportMsg.dest_addr = sv->eth_addr;
 	reportMsg.dest_port = PORT_ETH;
 	//reportMsg.length = sizeof(sdp_hdr_t) + sizeof(cmd_hdr_t);
-	uint checkSDP = spin1_send_sdp_msg(&reportMsg, 10);
+    spin1_send_sdp_msg(&reportMsg, 10);
 	//spin1_delay_us(50);
 	//if(checkSDP == 0)
 	//	io_printf(IO_STD, "SDP fail!\n");
@@ -104,84 +104,134 @@ void getImage(sdp_msg_t *msg, uint port)
 	case SDP_PORT_B_IMG_DATA: imgIn = blkInfo->imgBIn; break;
 	}
 
-	// forward?
+    // get the image data from SCP+data_part
+    dLen = msg->length - sizeof(sdp_hdr_t);	// dLen is used by hDMADone()
+    // io_printf(IO_BUF, "Receiving %d-bytes\n", dLen);
+
+#ifndef USE_MCPL_FOR_FWD
+    // forward?
 	if(chainMode == 1 && sark_chip_id()==0) {
-		//io_printf(IO_BUF, "Forwarding to node ");
-		for(ushort i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
-			//io_printf(IO_BUF, "%d ", chips[i].id);
-			msg->dest_addr = (chips[i].x << 8) + chips[i].y;
-			//msg->srce_addr = sv->p2p_addr;	// replace with my ID instead of ETH
-			//msg->srce_port = myCoreID;
-			uint checkSDP = spin1_send_sdp_msg(msg, 10);
-			//if(checkSDP==0)
-			//	io_printf(IO_STD, "SDP fail to sent!\n");
-		}
-		//io_printf(IO_BUF, "\n");
+        //io_printf(IO_BUF, "Forwarding to node ");
+        for(ushort i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
+            //io_printf(IO_BUF, "%d ", chips[i].id);
+            msg->dest_addr = (chips[i].x << 8) + chips[i].y;
+            //msg->srce_addr = sv->p2p_addr;	// replace with my ID instead of ETH
+            //msg->srce_port = myCoreID;
+            uint checkSDP = spin1_send_sdp_msg(msg, 10);
+            //if(checkSDP==0)
+            //	io_printf(IO_STD, "SDP fail to sent!\n");
+        }
+        //io_printf(IO_BUF, "\n");
 	}
+#endif
 
-	// get the image data from SCP+data_part
-	dLen = msg->length - sizeof(sdp_hdr_t);	// dLen is used by hDMADone()
-	// io_printf(IO_BUF, "Receiving %d-bytes\n", dLen);
-
+    // the processing of chip<0,0>, the other chips depends on MCPL
 	if(dLen > 0) {
-		//io_printf(IO_BUF, "blkInfo->imgRIn = 0x%x\n", blkInfo->imgRIn);
+
+        //io_printf(IO_BUF, "blkInfo->imgRIn = 0x%x\n", blkInfo->imgRIn);
 		// in the beginning, dtcmImgBuf is NULL
+		/*
 		if(dtcmImgBuf==NULL) {
+			io_printf(IO_BUF, "Allocating dtcmImgBuf...\n");
 			dtcmImgBuf = sark_alloc(sizeof(cmd_hdr_t) + SDP_BUF_SIZE, sizeof(uchar));
 			if(dtcmImgBuf==NULL) {
 				io_printf(IO_STD, "dtcmImgBuf alloc fail!\n");
 				rt_error(RTE_ABORT);
 			}
 			dmaImg2SDRAMdone = 1;	// will be set in hDMA()
-			whichRGB = port;
 		}
+		*/
+		whichRGB = port;
 
-		// if the previous dma transfer is still in progress...
-		while(dmaImg2SDRAMdone==0) {
-		}
+		// Indar: kenapa blok-1 kacau? coba copy ke pixelBuffer, bukan ke dtcmImgBuf
+		// spin1_memcpy((void *)dtcmImgBuf, (void *)&msg->cmd_rc, dLen);
+		spin1_memcpy((void *)pixelBuffer, (void *)&msg->cmd_rc, dLen);
+#ifdef USE_MCPL_FOR_FWD
+        // forward in MCPL mode
+		//uint *ptrBuf = (uint *)dtcmImgBuf;
+		uint buf;
+        uint t = dLen / sizeof(uint);
+        if(dLen % sizeof(uint) > 0) t++;
+
+		uint key;
+        //Q: how dLen will be transmitted? it is needed in hDMA by node other than <0,0>
+        for(uint px=0; px<t; px++) {
+			//sark_mem_cpy((void *)&buf, (void *)dtcmImgBuf+px*sizeof(uint), sizeof(uint));
+			buf = pixelBuffer[px];
+			key = MCPL_BCAST_PIXEL_BASE + (px << 4);
+            switch(port) {
+            case SDP_PORT_R_IMG_DATA:
+				key += 1; break;
+            case SDP_PORT_G_IMG_DATA:
+				key += 3; break;
+            case SDP_PORT_B_IMG_DATA:
+				key += 5;
+			}
+			spin1_send_mc_packet(key, buf, WITH_PAYLOAD);
+			//spin1_send_mc_packet(key, *ptrBuf, WITH_PAYLOAD);
+			//io_printf(IO_STD, "MCPL_BCAST_*pixel-%d: key=0x%x, data=0x%x\n", px, key,*ptrBuf);
+			//ptrBuf++;
+			//sark_delay_us(4000000);
+        }
+		/*
+        switch(port) {
+        case SDP_PORT_R_IMG_DATA:
+            spin1_send_mc_packet(MCPL_BCAST_RED_PX_END, dLen, WITH_PAYLOAD); break;
+        case SDP_PORT_G_IMG_DATA:
+            spin1_send_mc_packet(MCPL_BCAST_GREEN_PX_END,dLen, WITH_PAYLOAD); break;
+        case SDP_PORT_B_IMG_DATA:
+            spin1_send_mc_packet(MCPL_BCAST_BLUE_PX_END, dLen, WITH_PAYLOAD);
+        }
+		*/
+		key += 1;
+		spin1_send_mc_packet(key, dLen, WITH_PAYLOAD);
+		//io_printf(IO_STD, "MCPL_BCAST_*END key-0x%x...\n", key);
+#endif
 		// copy to dtcm buffer, if the previous transfer is complete
 		// spin1_memcpy((void *)imgRIn, (void *)&msg->cmd_rc, dLen);
 		dmaImg2SDRAMdone = 0;	// reset the dma done flag
-		spin1_memcpy((void *)dtcmImgBuf, (void *)&msg->cmd_rc, dLen);
-
-		/*
-		// debugging, VERY SLOW...!!!!
-		io_printf(IO_BUF, "Receiving %d pixels!\n", dLen);
-		for(ushort i=0; i<dLen; i++)
-			io_printf(IO_BUF, "%02x ", dtcmImgBuf[i]);
-		io_printf(IO_BUF, "\n");
-		*/
-
 		do {
-			// checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG, (void *)blkInfo->imgRIn, (void *)dtcmImgBuf,
-			//				   DMA_WRITE, dLen);
-			//checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG + (myCoreID << 16), (void *)imgIn,
+
+			// Indar: coba pakai pixelBuffer, bukan dtcmImgBuf
+			//checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG , (void *)imgIn,
 			//							  (void *)dtcmImgBuf, DMA_WRITE, dLen);
-			// no need to include core ID, because only leadAp will do this!!!
 			checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG , (void *)imgIn,
-										  (void *)dtcmImgBuf, DMA_WRITE, dLen);
-            //if(checkDMA==0)
-            //	io_printf(IO_BUF, "[Retrieving] DMA full! Retry!\n");
+										  (void *)pixelBuffer, DMA_WRITE, dLen);
+
 		} while(checkDMA==0);
 		// imgRIn += dLen; -> moved to hDMADone
 
+		// if the previous dma transfer is still in progress...
+		// while(dmaImg2SDRAMdone==0) {
+		// }
+
 		// send reply immediately only if the sender is host-PC
 		// if(msg->srce_port == PORT_ETH)	// no, because we have modified srce_port in chainMode 1
-		if(chainMode == 0 || (chainMode == 1 && sv->p2p_addr == 0))
+		if(chainMode == 0 || (chainMode == 1 && sv->p2p_addr == 0)) {
+			// io_printf(IO_BUF, "Replied!\n");
 			sendReply(dLen, 0);
+		}
+
 	}
 	// if zero data is sent, means the end of message transfer!
 	else {
-		sark_free(dtcmImgBuf);
+#ifdef USE_MCPL_FOR_FWD
+        // tell the other nodes to start processing
+		// io_printf(IO_BUF, "Broadcasting MCPL_BCAST_IMG_READY\n");
+        spin1_send_mc_packet(MCPL_BCAST_IMG_READY, port, WITH_PAYLOAD);
+#endif
+        afterCollectPixel(port, 0);
+        /*
+        sark_free(dtcmImgBuf);
 		dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
 		switch(port) {
 		case SDP_PORT_R_IMG_DATA:
-			io_printf(IO_BUF, "layer-R is complete!\n");
+            io_printf(IO_BUF, "layer-R is complete!\n");
 			blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullRImageRetrieved = 1;
 			break;
 		case SDP_PORT_G_IMG_DATA:
-			io_printf(IO_BUF, "layer-G is complete!\n");
+            io_printf(IO_BUF, "layer-G is complete!\n");
 			blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
 			blkInfo->fullGImageRetrieved = 1;
 			break;
@@ -208,8 +258,95 @@ void getImage(sdp_msg_t *msg, uint port)
             }
 			spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
 		}
+        */
+    }
+}
 
-	}
+// collectPixel() is basically similar to getImage, but it is for other nodes than <0,0>
+// it is called when
+// MCPL_BCAST_BLUE_PX_END or MCPL_BCAST_GREEN_PX_END or MCPL_BCAST_RED_PX_END is received
+void collectPixel(uint key, uint dataLength)
+{
+    // reset the counter for the next delivery
+    pixelCntr = 0;
+
+    //io_printf(IO_BUF, "pkt-%d\n", dataLength);
+    uint checkDMA;
+    uchar *imgIn;
+	switch(key & 0xF) {
+	// case MCPL_BCAST_RED_PX_END:
+	case 2:
+        whichRGB = SDP_PORT_R_IMG_DATA;
+        imgIn = blkInfo->imgRIn;
+        break;
+	// case MCPL_BCAST_GREEN_PX_END:
+	case 4:
+        whichRGB = SDP_PORT_G_IMG_DATA;
+        imgIn = blkInfo->imgGIn;
+        break;
+	// case MCPL_BCAST_BLUE_PX_END:
+	case 6:
+        whichRGB = SDP_PORT_B_IMG_DATA;
+        imgIn = blkInfo->imgBIn;
+        break;
+    }
+
+    // Note: blkInfo->imgRIn is altered in hDMA!!!
+	// it needs dLen to be supplied beforehand !!!
+    dLen = dataLength;
+    checkDMA = spin1_dma_transfer(DMA_STORE_IMG_TAG , (void *)imgIn,
+                                  (void *)pixelBuffer, DMA_WRITE, dataLength);
+
+}
+
+void afterCollectPixel(uint port, uint Unused)
+{
+	// who am i?
+	io_printf(IO_BUF, "p2p_addr = 0x%x\n", sv->p2p_addr);
+	// io_printf(IO_BUF, "After collect\n");
+    //if(dtcmImgBuf != NULL) {
+
+	/* Indar: apa perlu dtcmImgBuf di reset? karena tidak dipakai disini
+    if(sv->p2p_addr = 0) {
+        sark_free(dtcmImgBuf);
+        dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
+    }
+	*/
+    switch(port) {
+    case SDP_PORT_R_IMG_DATA:
+        io_printf(IO_BUF, "layer-R is complete!\n");
+        blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
+        blkInfo->fullRImageRetrieved = 1;
+        break;
+    case SDP_PORT_G_IMG_DATA:
+        io_printf(IO_BUF, "layer-G is complete!\n");
+        blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
+        blkInfo->fullGImageRetrieved = 1;
+        break;
+    case SDP_PORT_B_IMG_DATA:
+        io_printf(IO_BUF, "layer-B is complete!\n");
+        blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
+        blkInfo->fullBImageRetrieved = 1;
+        break;
+    }
+
+    // check: if the image in memory of all chips are similar
+    // io_printf(IO_STD, "Please check my content!\n"); // --> OK!
+
+    // if grey or at the end of B image transmission, it should trigger processing
+    if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
+        if(sv->p2p_addr==0) {
+			// send empty sdp just to notify host that spinnaker is starting to process
+            tic = sv->clock_ms;
+			io_printf(IO_STD, "Full image is retrieved! Start processing at %u by chip-%d!\n",
+					  tic, sv->p2p_addr);
+            resultMsg.length = sizeof(sdp_hdr_t);   // send empty message
+            resultMsg.srce_port = myCoreID;
+            resultMsg.srce_addr = sv->p2p_addr;
+            spin1_send_sdp_msg(&resultMsg, 10);
+        }
+        spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
+    }
 }
 
 /*
@@ -299,7 +436,10 @@ void hSDP(uint mBox, uint port)
 		}
 		// TODO: don't forget to give a "kick" from python?
 		else if(msg->cmd_rc == SDP_CMD_CLEAR) {
-			io_printf(IO_STD, "Clearing...\n");
+			if(sv->p2p_addr==0)
+				io_printf(IO_STD, "Clearing...\n");
+			else
+				io_printf(IO_BUF, "Clearning...\n");
 			initImage();
 
 			// should be propagated?
@@ -554,7 +694,7 @@ void initRouter()
 	uint dest;
 
 	// first, set individual destination
-	uint e = rtr_alloc(17);
+    uint e = rtr_alloc(23);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -565,7 +705,7 @@ void initRouter()
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
 	// then add another keys
-	e = rtr_alloc(9);
+    e = rtr_alloc(16);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -586,54 +726,42 @@ void initRouter()
 		else					dest = leader;
 		rtr_mc_set(e, MCPL_BLOCK_DONE, 0xFFFFFFFF, dest); e++;
 
-		// special for MCPL_BCAST_SEND_RESULT
-		dest = leader;
+        // special for MCPL_BCAST_SEND_RESULT and MCPL_BCAST_*pixels
+		dest = leader;	// by default, go to leadAP, unless:
 #ifdef USE_SPIN5
 		ushort d;	// distance
 		if(x==y) {
-			if(x!=7)
+			if(x==0)
+				dest = 1 + (1 << 1) + (1 << 2);
+			else if(x<7)
 				dest += 1 + (1 << 1) + (1 << 2);
 		}
 		else if(x>y) {
 			d = x - y;
-			if(y<4 && d<4)
+			if(x<7 && d<4)
 				dest += 1;
-			else if(x<7)
-				dest +=1;
 		}
 		else if(x<y) {
 			d = y - x;
 			if(d<3 && y<7)
 				dest += (1 << 2);
 		}
-		/*
-		if(x==y) {
-			switch(x){
-			//case 0:  dest += (1 << 1) + (1 << 2); break;
-			case 0:  dest = (1 << 1) + (1 << 2); break;
-			case 7:  dest += (1 << 5); break;
-			default: dest += (1 << 1) + (1 << 2) + (1 << 5);
-			}
-		}
-		else if(x>y) {
-			d = x - y;
-			if(y>0 && d<4)
-				dest += (1 << 5);	// south
-		}
-		else { // x<y
-			d = y - x;
-			if((x>0 && x < 5 && d<3) || (x=5 && y==6))
-				dest += (1 << 2);	// north
-		}
-		*/
-		rtr_mc_set(e, MCPL_BCAST_SEND_RESULT, 0xFFFFFFFF, dest);
 #else
-		if(sv->p2p_addr==0 || sv->board_addr==0)
+		if(sv->p2p_addr==0)
 			//dest += 1 + (1<<1) + (1<<2);
 			dest = 1 + (1<<1) + (1<<2);
-		rtr_mc_set(e, MCPL_BCAST_SEND_RESULT, 0xFFFFFFFF, dest);
 #endif
-	}
+        // broadcast notification to send result
+        rtr_mc_set(e, MCPL_BCAST_SEND_RESULT, 0xFFFFFFFF, dest); e++;
+        // broadcasting pixels
+		rtr_mc_set(e, MCPL_BCAST_RED_PX, 0xFFFF000F, dest); e++;
+		rtr_mc_set(e, MCPL_BCAST_RED_PX_END, 0xFFFF000F, dest); e++;
+		rtr_mc_set(e, MCPL_BCAST_GREEN_PX, 0xFFFF000F, dest); e++;
+		rtr_mc_set(e, MCPL_BCAST_GREEN_PX_END, 0xFFFF000F, dest); e++;
+		rtr_mc_set(e, MCPL_BCAST_BLUE_PX, 0xFFFF000F, dest); e++;
+		rtr_mc_set(e, MCPL_BCAST_BLUE_PX_END, 0xFFFF000F, dest); e++;
+        rtr_mc_set(e, MCPL_BCAST_IMG_READY, 0xFFFFFFFF, dest); e++;
+    }
 }
 
 void initImage()
@@ -649,14 +777,15 @@ void initImage()
 	blkInfo->imgGOut = (uchar *)IMG_G_BUFF1_BASE;
 	blkInfo->imgBOut = (uchar *)IMG_B_BUFF1_BASE;
 	dtcmImgBuf = NULL;
+    pixelCntr = 0;  // for forwarding using MCPL
 }
 
 
 // terminate gracefully
 void cleanUp()
 {
-    sark_xfree(sv->sysram_heap, blkInfo, ALLOC_LOCK);
-    //sark_xfree(sv->sdram_heap, blkInfo, ALLOC_LOCK);
+	//sark_xfree(sv->sysram_heap, blkInfo, ALLOC_LOCK);
+	sark_xfree(sv->sdram_heap, blkInfo, ALLOC_LOCK);
 	// in this app, we "fix" the address of image, no need for xfree
 
 	/*

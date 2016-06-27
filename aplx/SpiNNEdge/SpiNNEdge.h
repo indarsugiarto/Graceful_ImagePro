@@ -2,6 +2,7 @@
  * 0.1 Initial version
  * 0.2 GUI improvement
  * 0.3 Including spin5
+ * 0.4 Using MCPL for forwarding pixel values
  *
  * TODO:
  * - UDP communication is still troublesome:
@@ -24,12 +25,14 @@
 #ifndef SPINNEDGE_H
 #define SPINNEDGE_H
 
-#define PROG_VERSION	0.3
+#define PROG_VERSION	0.4
 #define MAJOR_VERSION	0
-#define MINOR_VERSION	3
+#define MINOR_VERSION	4
 
-#define USE_SPIN3
-//#define USE_SPIN5
+//#define USE_SPIN3
+#define USE_SPIN5
+
+#define USE_MCPL_FOR_FWD
 
 #include <spin1_api.h>
 
@@ -56,7 +59,7 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          200
+#define SDP_TX_TIMEOUT          300
 //#define SDP_TX_TIMEOUT          0
 
 #define TIMER_TICK_PERIOD_US 	1000000
@@ -111,6 +114,17 @@ static const short FILT_DENOM = 159;
 #define MCPL_PING_REPLY			0x1ead0001
 #define MCPL_FILT_DONE			0x1ead0002	// worker send signal to leader
 #define MCPL_EDGE_DONE			0x1ead0003
+
+// special key with base value 0xbca5FFF
+#define MCPL_BCAST_PIXEL_BASE	0xbca60000
+#define MCPL_BCAST_RED_PX       0xbca60001  // the pixels are in the payload
+#define MCPL_BCAST_RED_PX_END   0xbca60002  // notify next node that image channel is complete
+#define MCPL_BCAST_GREEN_PX     0xbca60003  // FFF part contains information about dLen
+#define MCPL_BCAST_GREEN_PX_END 0xbca60004
+#define MCPL_BCAST_BLUE_PX      0xbca60005
+#define MCPL_BCAST_BLUE_PX_END  0xbca60006
+#define MCPL_BCAST_IMG_READY    0xbca6FFF7
+
 //special key (with values)
 #define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
 #define MCPL_BCAST_SEND_RESULT	0xbca50005	// broadcasting host acknowledge
@@ -208,6 +222,9 @@ ushort ackCntr;
 volatile uint64 tic, toc;
 volatile ushort elapse;
 
+uint pixelBuffer[(sizeof(cmd_hdr_t) + 256)/sizeof(uint)];
+ushort pixelCntr;
+
 // Pelajaran hari ini: Jangan taruh static di sdp_msg_t, akibatnya
 // isi variabel jadi kacau. Mungkin karena ukuran memori statis di sark dibatasi?
 sdp_msg_t reportMsg;			// in python, this will be handled in blocking mode (via native socket)
@@ -235,6 +252,8 @@ void afterFiltDone(uint arg0, uint arg1);
 void afterEdgeDone(uint arg0, uint arg1);
 void sendResult(uint arg0, uint arg1);
 void notifyHostDone(uint arg0, uint arg1);	// inform host that all results have been sent
+void collectPixel(uint key, uint payload);  // for MCPL-base forwarding
+void afterCollectPixel(uint port, uint Unused);
 
 uchar *dtcmImgBuf;
 // for fetching/storing image
@@ -251,6 +270,11 @@ void printWID(uint None, uint Neno);
 void myDelay();
 void sendReply(uint arg0, uint arg1);
 void printWLoad();
+
+// for debugging:
+static ushort linesR = 0;
+static ushort linesG = 0;
+static ushort linesB = 0;
 
 #endif // SPINNEDGE_H
 
