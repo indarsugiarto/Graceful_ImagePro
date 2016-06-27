@@ -96,6 +96,9 @@ void sendReply(uint arg0, uint arg1)
 // since R,G and B channel processing are similar
 void getImage(sdp_msg_t *msg, uint port)
 {
+	// if I'm not include in the list, skip this
+	if(blkInfo->maxBlock==0) return;
+
 	uint checkDMA = 0;
 	uchar *imgIn;
 	switch(port) {
@@ -301,8 +304,10 @@ void collectPixel(uint key, uint dataLength)
 
 void afterCollectPixel(uint port, uint Unused)
 {
+	// if I'm not include in the list, skip this
+	if(blkInfo->maxBlock==0) return;
 	// who am i?
-	io_printf(IO_BUF, "p2p_addr = 0x%x\n", sv->p2p_addr);
+	//io_printf(IO_BUF, "p2p_addr = 0x%x\n", sv->p2p_addr);
 	// io_printf(IO_BUF, "After collect\n");
     //if(dtcmImgBuf != NULL) {
 
@@ -532,6 +537,9 @@ void afterFiltDone(uint arg0, uint arg1)
 // use workers.blkImgROut instead!
 void sendResult(uint arg0, uint arg1)
 {
+	// if I'm not include in the list, skip this
+	if(blkInfo->maxBlock==0) return;
+
 	//io_printf(IO_STD, "Expecting processing by node-%d\n", arg0);
 	if(arg0 != blkInfo->nodeBlockID) return;
 	// format sdp (scp_segment + data_segment):

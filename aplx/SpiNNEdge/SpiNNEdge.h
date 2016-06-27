@@ -3,6 +3,7 @@
  * 0.2 GUI improvement
  * 0.3 Including spin5
  * 0.4 Using MCPL for forwarding pixel values
+ * 0.5 Use reply for sending result to host
  *
  * TODO:
  * - UDP communication is still troublesome:
@@ -25,9 +26,9 @@
 #ifndef SPINNEDGE_H
 #define SPINNEDGE_H
 
-#define PROG_VERSION	0.4
+#define PROG_VERSION	0.5
 #define MAJOR_VERSION	0
-#define MINOR_VERSION	4
+#define MINOR_VERSION	5
 
 //#define USE_SPIN3
 #define USE_SPIN5

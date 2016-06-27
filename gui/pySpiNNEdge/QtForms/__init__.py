@@ -73,14 +73,22 @@ CHIP_LIST_48 = [[0,0],[1,0],[2,0],[3,0],[4,0],\
 Today (21 June 11:47) I found that sdp chain is not working as expected. Some chips don't receive
 the packets. Weird! So, let's reduce the size:
 """
-CHIP_LIST_15 = [[0,0],[1,0],[2,0],[3,0],[4,0],\
-                [0,1],[1,1],[2,1],[3,1],[4,1],\
+CHIP_LIST_15 = [[0,0],[1,0],[2,0],[3,0],[4,0],
+                [0,1],[1,1],[2,1],[3,1],[4,1],
                 [0,2],[1,2],[2,2],[3,2],[4,2]]
+
+CHIP_LIST_20 = [[0,0],[1,0],[2,0],[3,0],[4,0],
+                [0,1],[1,1],[2,1],[3,1],[4,1],
+                [0,2],[1,2],[2,2],[3,2],[4,2],
+                [0,3],[1,3],[2,3],[3,3],[4,3]]
+
 
 CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
 spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
+
 #spin5 = CHIP_LIST_48
 spin5 = CHIP_LIST_15
+#spin5 = CHIP_LIST_20
 #SPINN3_HOST = '192.168.240.1'
 SPINN3_HOST = '192.168.240.253'
 SPINN5_HOST = '192.168.240.1'
@@ -183,10 +191,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     def cbSpiNNChanged(self, idx):
         if idx==0:
             self.DEF_HOST = SPINN3_HOST
-            print "Will use Spin3"
+            print "Will use Spin3 with {}-nodes".format(len(spin3))
         else:
             self.DEF_HOST = SPINN5_HOST
-            print "Will use Spin5"
+            print "Will use Spin5 with {}-nodes".format(len(spin5))
 
     def closeEvent(self, event):
         if self.okToClose:

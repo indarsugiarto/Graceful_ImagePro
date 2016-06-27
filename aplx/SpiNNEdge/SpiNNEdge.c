@@ -143,8 +143,12 @@ void c_main()
 			io_printf(IO_BUF, "blkInfo alloc error!\n");
 			rt_error(RTE_ABORT);
 		}
-		else
+		else {
+			// let's setup basic block info to block non-node chips:
+			blkInfo->maxBlock = 0;
+
 			initImage();	// some of blkInfo are initialized there
+		}
 		spin1_set_timer_tick(TIMER_TICK_PERIOD_US);
 		spin1_callback_on(TIMER_TICK, hTimer, PRIORITY_TIMER);
 		spin1_callback_on(SDP_PACKET_RX, hSDP, PRIORITY_SDP);
