@@ -42,10 +42,7 @@ void hTimer(uint tick, uint Unused)
 #endif
     }
 	else {
-/*
-		io_printf(IO_STD, "sv->clock_ms = %u\n", sv->clock_ms);
-		io_printf(IO_STD, "lagi, sv->clock_ms = %u\n", sv->clock_ms);
-*/
+        //io_printf(IO_STD, "sv->clock_ms = %u\n", sv->clock_ms);
 	}
 }
 
@@ -476,17 +473,14 @@ void hSDP(uint mBox, uint port)
 		}
 			*/
 	}
-	/*
-	else if(port==SDP_PORT_ACK) {
-		if(msg->seq==blkInfo->nodeBlockID+1) {
-			hostAck = 1;
-			ackCntr++;
-		}
-		else
-			spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, msg->seq, WITH_PAYLOAD);
-	}
-	*/
-	// if host send images
+
+    else if(port==SDP_PORT_ACK) {
+        //io_printf(IO_STD, "Got ack. Send MCPL_BCAST_HOST_ACK...\n");
+        //sark_delay_us(100000);
+        spin1_send_mc_packet(MCPL_BCAST_HOST_ACK, 0, WITH_PAYLOAD);
+    }
+
+    // if host send images
 	// NOTE: what if we use arg part of SCP for image data? OK let's try, because see HOW.DO...
 	else if(port==SDP_PORT_R_IMG_DATA) {
 		getImage(msg, SDP_PORT_R_IMG_DATA);
@@ -605,21 +599,22 @@ void sendResult(uint arg0, uint arg1)
 
 				total[rgb] += sz;
 
-				// wait for ack
-
-				//while(hostAck==0) {
-				//}
-
 				hostAck = 0;
                 spin1_send_sdp_msg(&resultMsg, 10);
-				//io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
-				//		  lines, c+1, resultMsg.tag);
+                // wait for ack if not root-node
+                // somehow, root-node doesn't respond to hSDP
+                if(sv->p2p_addr != 0) {
+                    //io_printf(IO_STD, "Waiting ack...\n");
+                    while(hostAck==0) {
 
-				//spin1_delay_us(SDP_TX_TIMEOUT);
-				spin1_delay_us(SDP_TX_TIMEOUT + blkInfo->maxBlock*10);
+                    }
+                } else {
+                    //io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
+                    //		  lines, c+1, resultMsg.tag);
 
-				// send debugging via debugMsg
-
+                    spin1_delay_us(SDP_TX_TIMEOUT);
+                    //spin1_delay_us(SDP_TX_TIMEOUT + blkInfo->maxBlock*10);
+                }
 				c++;		// for the dtcmImgBuf pointer
 				rem -= sz;
 			} while(rem > 0);
@@ -645,7 +640,8 @@ void afterEdgeDone(uint arg0, uint arg1)
 
 	// since each chip holds a part of image data, it needs to send individually to host
     if(blkInfo->nodeBlockID==0)	{   // trigger the chain
-		spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+        //spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
+        spin1_schedule_callback(sendResult, 0, 0, PRIORITY_LOWEST);
 		toc = sv->clock_ms;
 		elapse = toc-tic;	// in milliseconds
     }
@@ -713,7 +709,7 @@ void initRouter()
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
 	// then add another keys
-    e = rtr_alloc(16);
+    e = rtr_alloc(17);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -734,7 +730,7 @@ void initRouter()
 		else					dest = leader;
 		rtr_mc_set(e, MCPL_BLOCK_DONE, 0xFFFFFFFF, dest); e++;
 
-        // special for MCPL_BCAST_SEND_RESULT and MCPL_BCAST_*pixels
+        // special for MCPL_BCAST_SEND_RESULT, MCPL_BCAST_*pixels and HOST_ACK
 		dest = leader;	// by default, go to leadAP, unless:
 #ifdef USE_SPIN5
 		ushort d;	// distance
@@ -769,6 +765,7 @@ void initRouter()
 		rtr_mc_set(e, MCPL_BCAST_BLUE_PX, 0xFFFF000F, dest); e++;
 		rtr_mc_set(e, MCPL_BCAST_BLUE_PX_END, 0xFFFF000F, dest); e++;
         rtr_mc_set(e, MCPL_BCAST_IMG_READY, 0xFFFFFFFF, dest); e++;
+        rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest); e++;
     }
 }
 

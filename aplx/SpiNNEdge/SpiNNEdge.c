@@ -61,7 +61,7 @@ void hMCPL(uint key, uint payload)
 	//------------------------ this is leadAp only part --------------------------
 	else if(key==MCPL_BCAST_SEND_RESULT) {
 		//if(payload == blkInfo->nodeBlockID) {
-			spin1_schedule_callback(sendResult, payload, 0, PRIORITY_PROCESSING);
+            spin1_schedule_callback(sendResult, payload, 0, PRIORITY_LOWEST);
 			// io_printf(IO_BUF, "pay=%d!\n", payload);
 			//hostAck = 1;
 			//ackCntr++;
@@ -95,6 +95,10 @@ void hMCPL(uint key, uint payload)
     // MCPL_BCAST_IMG_READY should be put prior to the other pixel-related keys
     else if(key == MCPL_BCAST_IMG_READY) {
         spin1_schedule_callback(afterCollectPixel, payload, 0, PRIORITY_PROCESSING);
+    }
+    else if(key==MCPL_BCAST_HOST_ACK) {
+        //io_printf(IO_STD, "MCPL_BCAST_HOST_ACK is received. Setting hostAck to 1.\n");
+        hostAck = 1;
     }
 	//else if((key >> 4) == 0x0bca5fff) {
 	else if((key & 0xFFFF0000) == MCPL_BCAST_PIXEL_BASE) {	// because pixel index is carried on in the key

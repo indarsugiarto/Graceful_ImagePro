@@ -30,8 +30,8 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	5
 
-//#define USE_SPIN3
-#define USE_SPIN5
+#define USE_SPIN3
+//#define USE_SPIN5
 
 #define USE_MCPL_FOR_FWD
 
@@ -60,10 +60,11 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          300
+#define SDP_TX_TIMEOUT          150
 //#define SDP_TX_TIMEOUT          0
 
 #define TIMER_TICK_PERIOD_US 	1000000
+#define PRIORITY_LOWEST         4
 #define PRIORITY_TIMER			3
 #define PRIORITY_PROCESSING		2
 #define PRIORITY_SDP			1
@@ -115,6 +116,8 @@ static const short FILT_DENOM = 159;
 #define MCPL_PING_REPLY			0x1ead0001
 #define MCPL_FILT_DONE			0x1ead0002	// worker send signal to leader
 #define MCPL_EDGE_DONE			0x1ead0003
+#define MCPL_BCAST_SEND_RESULT	0xbca50005	// broadcasting host acknowledge
+#define MCPL_BCAST_HOST_ACK     0xbca50006
 
 // special key with base value 0xbca5FFF
 #define MCPL_BCAST_PIXEL_BASE	0xbca60000
@@ -128,7 +131,6 @@ static const short FILT_DENOM = 159;
 
 //special key (with values)
 #define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
-#define MCPL_BCAST_SEND_RESULT	0xbca50005	// broadcasting host acknowledge
 
 //some definitions
 #define FLAG_FILTERING_DONE		0xf117

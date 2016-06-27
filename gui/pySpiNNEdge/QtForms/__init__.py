@@ -226,6 +226,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             print "done!"
             self.RptSock.readyRead.connect(self.readRptSDP)
 
+        # test kirim sendAck
+        # self.sendAck(0)       # OK!
+
     @QtCore.pyqtSlot()
     def readRptSDP(self):
         # print "Got something..."
@@ -436,17 +439,20 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         # print "Got chunk from node-{}".format(blkID[0]-1)
         # then send acknowledge
         #self.trx.appendVal(len(pixel))
-        #self.sendAck(blkID[0])
+        # send Acknowledge:
+        self.sendAck(0)
+        # print "ack sent!"
 
     def sendAck(self, blkID):
         # Try with broadcasting method only
         # sendSDP(self,flags, tag, dp, dc, dax, day, cmd, seq, arg1, arg2, arg3, bArray):
         # dp = sdpImgConfigPort
-        dp = sdpAckPort
-        dc = sdpCore
-        cmd = SDP_CMD_ACK_RESULT
-        seq = blkID
-        self.sendSDP(0x07, 0, dp, dc, 0, 0, cmd, seq, 0, 0, 0, None)
+        dpc = (sdpAckPort << 5) + sdpCore
+        hdr = struct.pack('4B2H',0x07,0,dpc,255,0,0)
+        reply = QtNetwork.QUdpSocket()
+        self.sendSDP(0x07,0,sdpAckPort,sdpCore,0,0,0,0,0,0,0,None)
+        #reply.writeDatagram(hdr, QtNetwork.QHostAddress(SPINN3_HOST), DEF_SEND_PORT)
+        #self.RptSock.writeDatagram(hdr, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
     @QtCore.pyqtSlot()
     def pbLoadClicked(self):
