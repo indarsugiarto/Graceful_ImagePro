@@ -208,7 +208,7 @@ void getImage(sdp_msg_t *msg, uint port)
 		// send reply immediately only if the sender is host-PC
 		// if(msg->srce_port == PORT_ETH)	// no, because we have modified srce_port in chainMode 1
 		if(chainMode == 0 || (chainMode == 1 && sv->p2p_addr == 0)) {
-			// io_printf(IO_BUF, "Replied!\n");
+            // io_printf(IO_STD, "Replied!\n");
 			sendReply(dLen, 0);
 		}
 
@@ -332,8 +332,6 @@ void afterCollectPixel(uint port, uint Unused)
         break;
     }
 
-    // check: if the image in memory of all chips are similar
-    // io_printf(IO_STD, "Please check my content!\n"); // --> OK!
 
     // if grey or at the end of B image transmission, it should trigger processing
     if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
@@ -436,14 +434,20 @@ void hSDP(uint mBox, uint port)
 					id = msg->data[i*3 + 2];	chips[i].id = id;
 					spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_NODE + (id << 4),
 										 (x << 16)+y, WITH_PAYLOAD);
+
 				}
 
-				// forward image size and max block
+                // forward image size and max block
 				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_SIZE + (maxBlock << 4),
 									 msg->arg1, WITH_PAYLOAD);
-				// forward operation and needSendDebug flag
-				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_OPR + (msg->arg3) << 4,
+                //io_printf(IO_STD, "Broadcasting maxBlock and arg-1 = 0x%x\n", msg->arg1);
+                //spin1_delay_us(10000000);
+
+                // forward operation and needSendDebug flag
+                spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_OPR + (msg->arg3 << 4),
 									 msg->seq, WITH_PAYLOAD);
+                //io_printf(IO_STD, "Broadcasting seq = 0x%x\n", msg->seq);
+                //spin1_delay_us(5000000);
 
 				// finally send notification end of info
 				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_EOF, 0, WITH_PAYLOAD);
@@ -518,13 +522,16 @@ void hSDP(uint mBox, uint port)
     // if host send images
 	// NOTE: what if we use arg part of SCP for image data? OK let's try, because see HOW.DO...
 	else if(port==SDP_PORT_R_IMG_DATA) {
+        // io_printf(IO_STD, "R-images\n");
 		getImage(msg, SDP_PORT_R_IMG_DATA);
 	}
 	else if(port==SDP_PORT_G_IMG_DATA) {
-		getImage(msg, SDP_PORT_G_IMG_DATA);
+        // io_printf(IO_STD, "G-images\n");
+        getImage(msg, SDP_PORT_G_IMG_DATA);
 	}
 	else if(port==SDP_PORT_B_IMG_DATA) {
-		getImage(msg, SDP_PORT_B_IMG_DATA);
+        // io_printf(IO_STD, "B-images\n");
+        getImage(msg, SDP_PORT_B_IMG_DATA);
 	}
 	spin1_msg_free(msg);
 }
@@ -644,8 +651,8 @@ void sendResult(uint arg0, uint arg1)
 
                     }
                 } else {
-                    //io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
-                    //		  lines, c+1, resultMsg.tag);
+                    io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
+                              lines, c+1, resultMsg.tag);
 
                     spin1_delay_us(SDP_TX_TIMEOUT);
                     //spin1_delay_us(SDP_TX_TIMEOUT + blkInfo->maxBlock*10);
@@ -825,6 +832,15 @@ void initImage()
 
 void initNode(uint arg0, uint arg1)
 {
+    // adjust, which node am I
+    if(sv->p2p_addr != 0) {
+        for(ushort i=0; i<nodeCntr; i++) {
+            if((chips[i].x == CHIP_X(sv->p2p_addr)) && (chips[i].y == CHIP_Y(sv->p2p_addr))) {
+                blkInfo->nodeBlockID = chips[i].id;
+                break;
+            }
+        }
+    }
 	blkInfo->imageInfoRetrieved = 1;
 	initImage();
 	spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, needSendDebug, WITH_PAYLOAD);

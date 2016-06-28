@@ -577,7 +577,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
             if (blkDict[id][0] == blkDict[id][1]) and (blkDict[id][0] == 0):
                 chip0ID = id
             else:
-                # fill in the data segment
+                # fill in the data segment, but don't include root node
                 blkID = struct.pack("3B",blkDict[id][0], blkDict[id][1],id)
                 ba = ba + blkID
         arg2 = (chip0ID << 16) + len(blkDict)  # arg2.high = nodeBlockID, arg2.low = maxBlock

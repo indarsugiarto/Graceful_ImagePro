@@ -34,6 +34,7 @@ public slots:
     void errorString(QString err);
     void pbLoadClicked();
 	void pbPauseClicked();
+    void pbTestClicked();
     void refreshUpdate();
 	void videoFinish();
 	void setSize(int w, int h);

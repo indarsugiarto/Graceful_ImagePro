@@ -7,7 +7,9 @@
 
 vidStreamer::vidStreamer(QWidget *parent) :
     QWidget(parent),
-	isPaused(false),
+    worker(NULL),
+    decoder(NULL),
+    isPaused(false),
     ui(new Ui::vidStreamer)
 {
     ui->setupUi(this);
@@ -34,6 +36,9 @@ vidStreamer::vidStreamer(QWidget *parent) :
 	spinn->setHost(1);	//1=spin5
 	spinn->configSpin(1, 350, 350);
 	*/
+
+    // test functionality:
+    connect(ui->pbTest, SIGNAL(pressed()), this, SLOT(pbTestClicked()));
 }
 
 void vidStreamer::pbPauseClicked()
@@ -111,8 +116,8 @@ void vidStreamer::setSize(int w, int h)
 void vidStreamer::closeEvent(QCloseEvent *event)
 {
 	refresh->stop();
-	//worker->exit();
-	//worker->quit();
+    if(worker != NULL && worker->isRunning())
+        worker->quit();
 	screen->close();
 	edge->close();
 	event->accept();
@@ -120,8 +125,30 @@ void vidStreamer::closeEvent(QCloseEvent *event)
 
 void vidStreamer::videoFinish()
 {
-	worker->quit();
+    if(worker != NULL && worker->isRunning())
+        worker->quit();
 	refresh->stop();
 	screen->hide();
 	edge->hide();
 }
+
+void vidStreamer::pbTestClicked()
+{
+    /* Test-1: Send QImage-frame to SpiNNaker and display the result */
+    QString fName = QFileDialog::getOpenFileName(this, "Open Image File", "../../../../images", "*");
+    if(fName.isEmpty())
+        return;
+
+    // set correct spinnaker board
+    spinn->setHost(ui->cbSpiNN->currentIndex());
+
+    connect(spinn, SIGNAL(frameOut(const QImage &)), edge, SLOT(putFrame(const QImage &)));
+    QImage img;
+    img.load(fName);
+
+    edge->setSize(img.width(), img.height());   // to show the viewer
+    spinn->configSpin(ui->cbSpiNN->currentIndex(), img.width(), img.height());
+
+    spinn->frameIn(img);
+}
+

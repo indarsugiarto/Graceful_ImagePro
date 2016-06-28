@@ -116,26 +116,32 @@ void hMCPL(uint key, uint payload)
 		}
     }
 	else if((key & 0xFFFF0000) == MCPL_BCAST_IMG_INFO_BASE) {
-		if((key & 0xF) == 0) {
+        uint keyType = key & 0xF;
+        //io_printf(IO_BUF, "Got keyType-%d\n", keyType);
+        if(keyType == 0) {
 			nodeCntr = 0;
 		}
 		// got node info?
-		else if((key & 0xF) == 2) {
+        else if(keyType == 2) {
 			// NOTE: the root (node-0) is chip<0,0>
 			chips[nodeCntr].id = (key >> 4) & 0xfff;
 			chips[nodeCntr].x = payload >> 16;
 			chips[nodeCntr].y = payload & 0xFFFF;
 			nodeCntr++;
+            /*
+            io_printf(IO_BUF, "Node-%d = <%d,%d>\n", chips[nodeCntr-1].id,
+                    chips[nodeCntr-1].x, chips[nodeCntr-1].y);
+            */
 		}
 		// got image size and max block?
-		else if((key & 0xF) == 1) {
+        else if(keyType == 1) {
 			blkInfo->wImg = payload >> 16;
 			blkInfo->hImg = payload & 0xFFFF;
 			blkInfo->maxBlock = (key >> 4) & 0xfff;
 		}
 		// got operation type?
-		else if((key & 0xF) == 3) {
-			needSendDebug = (key >> 4) & 0xfff;
+        else if(keyType == 3) {
+			needSendDebug = (key >> 4) & 0xfff;            
 			blkInfo->isGrey = payload >> 8;
 			switch(payload & 0xFF) {
 			case IMG_OP_SOBEL_NO_FILT:
@@ -147,10 +153,14 @@ void hMCPL(uint key, uint payload)
 			case IMG_OP_LAP_NO_FILT:
 				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_LAPLACE;
 				break;
-			case IMG_OP_LAP_WITH_FILT:
+            case IMG_OP_LAP_WITH_FILT:
 				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_LAPLACE;
 				break;
 			}
+            /*
+            io_printf(IO_BUF, "Got seq = 0x%x\n", payload);
+            sark_delay_us(1000000);
+            */
 		}
 		// got EOF?
 		else {

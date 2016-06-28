@@ -92,6 +92,7 @@ void cSpiNNcomm::readResult()
 	ba.resize(sdpResult->pendingDatagramSize());
 	sdpResult->readDatagram(ba.data(), ba.size());
 	// then process it before emit the signal
+    // TODO: getImage()
 }
 
 // configure SpiNNaker to calculate workloads
@@ -138,7 +139,7 @@ void cSpiNNcomm::sendSDP(sdp_hdr_t h, QByteArray s, QByteArray d)
 
 	if(s.size()>0) ba.append(s);
 
-	if(d.size()>0) ba.append(s);
+    if(d.size()>0) ba.append(d);
 
 	sender->writeDatagram(ba, ha, DEF_SEND_PORT);
 	//sender->writeDatagram(ba, QHostAddress::Any, DEF_SEND_PORT);	// not working with Any
@@ -201,11 +202,13 @@ void cSpiNNcomm::sendReply()
 
 void cSpiNNcomm::sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len)
 {
-	QByteArray sdp = QByteArray(2, '\0');    // pad first
-	sdp.append(hdr(h));
-	QByteArray data = QByteArray::fromRawData(pixel, len);
-	sdp.append(data);
-	sender->writeDatagram(sdp, ha, DEF_SEND_PORT);
+    QByteArray sdp = QByteArray(2, '\0');    // pad first
+    sdp.append(hdr(h));
+    if(len > 0) {
+        QByteArray data = QByteArray::fromRawData(pixel, len);
+        sdp.append(data);
+    }
+    sender->writeDatagram(sdp, ha, DEF_SEND_PORT);
 }
 
 // The reply from SpiNNaker will be sent as reportMsg via tag-1 (SDP_TAG_REPLY). It
@@ -217,9 +220,9 @@ void cSpiNNcomm::frameIn(const QImage &frame)
 	uchar gArray[1024];
 	uchar bArray[1024];
 
-	const char *rPtr = (const char *)rArray;
-	const char *gPtr = (const char *)gArray;
-	const char *bPtr = (const char *)bArray;
+    const char *rPtr;
+    const char *gPtr;
+    const char *bPtr;
 
 	quint16 remaining, sz;
 
@@ -229,6 +232,9 @@ void cSpiNNcomm::frameIn(const QImage &frame)
 		memcpy(gArray, frame.scanLine(i)+wImg, wImg);
 		memcpy(bArray, frame.scanLine(i)+2*wImg, wImg);
 
+        rPtr = (const char *)rArray;
+        gPtr = (const char *)gArray;
+        bPtr = (const char *)bArray;
 		// assumming colorful frame (not greyscale)
 		remaining = wImg;
 		while(remaining > 0) {
@@ -255,5 +261,9 @@ void cSpiNNcomm::frameIn(const QImage &frame)
 			remaining -= sz;
 		}
 	}
+    // then we have to send just headers to indicate end of image
+    sendImgLine(hdrr, NULL, 0);
+    sendImgLine(hdrg, NULL, 0);
+    sendImgLine(hdrb, NULL, 0);
 }
 

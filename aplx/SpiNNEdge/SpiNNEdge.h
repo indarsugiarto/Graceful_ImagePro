@@ -30,8 +30,8 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	5
 
-//#define USE_SPIN3
-#define USE_SPIN5
+#define USE_SPIN3
+//#define USE_SPIN5
 
 #define USE_MCPL_FOR_FWD
 
@@ -61,7 +61,7 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 static const short FILT_DENOM = 159;
 
 #define SDP_TX_TIMEOUT          350
-//#define SDP_TX_TIMEOUT          0
+//#define SDP_TX_TIMEOUT          10000000
 
 #define MAX_NODES				48	// for Spin5, at the moment
 
