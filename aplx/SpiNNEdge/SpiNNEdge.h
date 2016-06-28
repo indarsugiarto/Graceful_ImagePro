@@ -30,8 +30,8 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	5
 
-#define USE_SPIN3
-//#define USE_SPIN5
+//#define USE_SPIN3
+#define USE_SPIN5
 
 #define USE_MCPL_FOR_FWD
 
@@ -60,8 +60,10 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          150
+#define SDP_TX_TIMEOUT          350
 //#define SDP_TX_TIMEOUT          0
+
+#define MAX_NODES				48	// for Spin5, at the moment
 
 #define TIMER_TICK_PERIOD_US 	1000000
 #define PRIORITY_LOWEST         4
@@ -129,6 +131,13 @@ static const short FILT_DENOM = 159;
 #define MCPL_BCAST_BLUE_PX_END  0xbca60006
 #define MCPL_BCAST_IMG_READY    0xbca6FFF7
 
+// special key for forwarding image configuration
+#define MCPL_BCAST_IMG_INFO_BASE	0xbca70000	// start of info chain
+#define MCPL_BCAST_IMG_INFO_SIZE	0xbca70001
+#define MCPL_BCAST_IMG_INFO_NODE	0xbca70002
+#define MCPL_BCAST_IMG_INFO_OPR		0xbca70003
+#define MCPL_BCAST_IMG_INFO_EOF		0xbca70004	// end of info
+
 //special key (with values)
 #define MCPL_BLOCK_DONE			0x1ead1ead	// should be sent to <0,0,1>
 
@@ -189,7 +198,10 @@ typedef struct chain {
 	ushort x;
 	ushort y;
 	ushort id;
+
 } chain_t;
+ushort nodeCntr;	// to count, how many nodes have been received by non-root node
+uchar needSendDebug;
 
 /* Due to filtering mechanism, the address of image might be changed.
  * Scenario:
@@ -218,7 +230,8 @@ block_info_t *blkInfo;			// let's put in sysram, to be shared with workers
 uchar nFiltJobDone;				// will be used to count how many workers have
 uchar nEdgeJobDone;				// finished their job in either filtering or edge detection
 uchar nBlockDone;
-chain_t *chips;					// list of chips in a chain for image loading
+//chain_t *chips;					// list of chips in a chain for image loading
+chain_t chips[MAX_NODES];
 uchar chainMode;				// 0=perchip, 1=use chain
 ushort ackCntr;
 
@@ -257,6 +270,7 @@ void sendResult(uint arg0, uint arg1);
 void notifyHostDone(uint arg0, uint arg1);	// inform host that all results have been sent
 void collectPixel(uint key, uint payload);  // for MCPL-base forwarding
 void afterCollectPixel(uint port, uint Unused);
+void initNode(uint arg0, uint arg1);
 
 uchar *dtcmImgBuf;
 // for fetching/storing image

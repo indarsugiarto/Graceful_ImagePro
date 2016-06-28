@@ -373,7 +373,18 @@ trigger the edge detection
 */
 void hSDP(uint mBox, uint port)
 {
+
 	sdp_msg_t *msg = (sdp_msg_t *)mBox;
+	/* Hasil: jadi tahu, QDataStream secara default pakai big endian
+	io_printf(IO_STD, "Debugging streamer...\n");
+	io_printf(IO_STD, "port = %d\n", port);
+	io_printf(IO_STD, "cmd_rc = 0x%x\n", msg->cmd_rc);
+	io_printf(IO_STD, "seq = 0x%x\n", msg->seq);
+	io_printf(IO_STD, "arg1 = 0x%x\n", msg->arg1);
+	io_printf(IO_STD, "arg2 = 0x%x\n", msg->arg2);
+	io_printf(IO_STD, "arg2 = 0x%x\n", msg->arg3);
+	*/
+
 	// if host send SDP_CONFIG, means the image has been
 	// loaded into sdram via ybug operation
 	/*
@@ -382,11 +393,11 @@ void hSDP(uint mBox, uint port)
 	*/
 	if(port==SDP_PORT_CONFIG) {
 		if(msg->cmd_rc == SDP_CMD_CONFIG || msg->cmd_rc == SDP_CMD_CONFIG_CHAIN) {
-			blkInfo->isGrey = msg->seq >> 8; //1=Grey, 0=color
 			blkInfo->wImg = msg->arg1 >> 16;
 			blkInfo->hImg = msg->arg1 & 0xFFFF;
 			blkInfo->nodeBlockID = msg->arg2 >> 16;
 			blkInfo->maxBlock = msg->arg2 & 0xFFFF;
+			blkInfo->isGrey = msg->seq >> 8; //1=Grey, 0=color
 			switch(msg->seq & 0xFF) {
 			case IMG_OP_SOBEL_NO_FILT:
 				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_SOBEL;
@@ -401,7 +412,7 @@ void hSDP(uint mBox, uint port)
 				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_LAPLACE;
 				break;
 			}
-
+			// info about chain is only useful for root, no need to be forwarded
 			if(msg->cmd_rc == SDP_CMD_CONFIG_CHAIN)
 				chainMode = 1;
 			else
@@ -409,32 +420,56 @@ void hSDP(uint mBox, uint port)
 			// is it use chain mechanism?
 			if(sark_chip_id() == 0 && chainMode==1) {
 				ushort i, x, y, id, maxBlock = blkInfo->maxBlock;
+				/*
 				if(chips != NULL)
 					sark_free(chips);
 				chips = sark_alloc(maxBlock-1, sizeof(chain_t));
+				*/
 
+#ifdef USE_MCPL_FOR_FWD
+				// broadcast image preparation
+				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_BASE, 0, WITH_PAYLOAD);
+				// forward node info
 				for(i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
 					x = msg->data[i*3];			chips[i].x = x;
 					y = msg->data[i*3 + 1];		chips[i].y = y;
 					id = msg->data[i*3 + 2];	chips[i].id = id;
+					spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_NODE + (id << 4),
+										 (x << 16)+y, WITH_PAYLOAD);
+				}
+
+				// forward image size and max block
+				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_SIZE + (maxBlock << 4),
+									 msg->arg1, WITH_PAYLOAD);
+				// forward operation and needSendDebug flag
+				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_OPR + (msg->arg3) << 4,
+									 msg->seq, WITH_PAYLOAD);
+
+				// finally send notification end of info
+				spin1_send_mc_packet(MCPL_BCAST_IMG_INFO_EOF, 0, WITH_PAYLOAD);
+
+#else
+				for(i=0; i<blkInfo->maxBlock-1; i++) {	// don't include me!
+					x = msg->data[i*3];			chips[i].x = x;
+					y = msg->data[i*3 + 1];		chips[i].y = y;
+					id = msg->data[i*3 + 2];	chips[i].id = id;
+
 					msg->dest_addr = (x << 8) + y;
 					msg->arg2 = (id << 16) + maxBlock;
 					msg->srce_addr = sv->p2p_addr;
 					msg->srce_port = myCoreID;
 					spin1_send_sdp_msg(msg, 10);
+					//Note: kalau tidak di-delay dengan io_print di bawah ini,
+					//		akan ada missing sdp. Ini kok mirip dengan kasus sendSDP
+					//		yang tidak bisa cepat-cepat ya?
+					io_printf(IO_BUF, "Forwarding config to chip<%d,%d> as node-%d\n",
+							  x,y,id);
 				}
+#endif
 
 			}
 
-			blkInfo->imageInfoRetrieved = 1;
-			initImage();
-
-			// just debugging:
-			spin1_schedule_callback(printImgInfo, msg->seq, 0, PRIORITY_PROCESSING);
-			// then inform workers to compute workload
-			spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, msg->arg3, WITH_PAYLOAD);
-			spin1_schedule_callback(computeWLoad,msg->arg3,0, PRIORITY_PROCESSING);	// only for leadAp
-
+			spin1_schedule_callback(initNode, 0, 0, PRIORITY_PROCESSING);
 		}
 		// TODO: don't forget to give a "kick" from python?
 		else if(msg->cmd_rc == SDP_CMD_CLEAR) {
@@ -709,7 +744,7 @@ void initRouter()
 			rtr_mc_set(e+i, i+1, 0xFFFFFFFF, (MC_CORE_ROUTE(i+1)));
 	}
 	// then add another keys
-    e = rtr_alloc(17);
+	e = rtr_alloc(18);
 	if(e==0) {
 		rt_error(RTE_ABORT);
 	} else {
@@ -766,6 +801,8 @@ void initRouter()
 		rtr_mc_set(e, MCPL_BCAST_BLUE_PX_END, 0xFFFF000F, dest); e++;
         rtr_mc_set(e, MCPL_BCAST_IMG_READY, 0xFFFFFFFF, dest); e++;
         rtr_mc_set(e, MCPL_BCAST_HOST_ACK, 0xFFFFFFFF, dest); e++;
+		// broadcasting image information
+		rtr_mc_set(e, MCPL_BCAST_IMG_INFO_BASE, 0xFFFF0000, dest); e++;
     }
 }
 
@@ -785,6 +822,16 @@ void initImage()
     pixelCntr = 0;  // for forwarding using MCPL
 }
 
+
+void initNode(uint arg0, uint arg1)
+{
+	blkInfo->imageInfoRetrieved = 1;
+	initImage();
+	spin1_send_mc_packet(MCPL_BCAST_GET_WLOAD, needSendDebug, WITH_PAYLOAD);
+	// just for debugging:
+	spin1_schedule_callback(printImgInfo, 0, 0, PRIORITY_PROCESSING);
+	spin1_schedule_callback(computeWLoad, needSendDebug, 0, PRIORITY_PROCESSING);
+}
 
 // terminate gracefully
 void cleanUp()
@@ -810,19 +857,17 @@ void printImgInfo(uint opType, uint None)
 		io_printf(IO_BUF, "grascale, ");
 	else
 		io_printf(IO_BUF, "color, ");
-	switch(opType & 0xFF) {
-	case IMG_OP_SOBEL_NO_FILT:
-		io_printf(IO_BUF, "for sobel without filtering\n");
-		break;
-	case IMG_OP_SOBEL_WITH_FILT:
-		io_printf(IO_BUF, "for sobel with filtering\n");
-		break;
-	case IMG_OP_LAP_NO_FILT:
-		io_printf(IO_BUF, "for laplace without filtering\n");
-		break;
-	case IMG_OP_LAP_WITH_FILT:
-		io_printf(IO_BUF, "for laplace with filtering\n");
-		break;
+	if(blkInfo->opType==IMG_SOBEL) {
+		if(blkInfo->opFilter==IMG_NO_FILTERING)
+			io_printf(IO_BUF, "for sobel without filtering\n");
+		else
+			io_printf(IO_BUF, "for sobel with filtering\n");
+	}
+	else {
+		if(blkInfo->opFilter==IMG_NO_FILTERING)
+			io_printf(IO_BUF, "for laplace without filtering\n");
+		else
+			io_printf(IO_BUF, "for laplace with filtering\n");
 	}
 	io_printf(IO_BUF, "nodeBlockID = %d with total Block = %d\n",
 			  blkInfo->nodeBlockID, blkInfo->maxBlock);

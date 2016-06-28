@@ -11,6 +11,7 @@ vidStreamer::vidStreamer(QWidget *parent) :
     ui(new Ui::vidStreamer)
 {
     ui->setupUi(this);
+	ui->cbSpiNN->setCurrentIndex(1);
     refresh = new QTimer(this);
     screen = new cScreen();
     edge = new cScreen();
@@ -22,10 +23,17 @@ vidStreamer::vidStreamer(QWidget *parent) :
     connect(ui->cbSpiNN, SIGNAL(currentIndexChanged(int)), spinn,
             SLOT(setHost(int)));
 
-	refresh->setInterval(40);   // which produces roughly 25fps
-	//refresh->setInterval(1000);   // which produces roughly 25fps
+	//refresh->setInterval(40);   // which produces roughly 25fps
+	refresh->setInterval(1000);   // which produces roughly 1fps
 	refresh->start();
 	//connect(refresh, SIGNAL(timeout()), this, SLOT(refreshUpdate()));
+
+
+	// let's test
+	/*
+	spinn->setHost(1);	//1=spin5
+	spinn->configSpin(1, 350, 350);
+	*/
 }
 
 void vidStreamer::pbPauseClicked()
@@ -57,12 +65,15 @@ void vidStreamer::errorString(QString err)
 
 void vidStreamer::pbLoadClicked()
 {
-	QString fName = QFileDialog::getOpenFileName(this, "Open Video File", "./", "*");
+	QString fName = QFileDialog::getOpenFileName(this, "Open Video File", "../../../../videos", "*");
     if(fName.isEmpty())
         return;
 
 	worker = new QThread();
 	decoder = new cDecoder();
+
+	// set correct spinnaker board
+	spinn->setHost(ui->cbSpiNN->currentIndex());
 
 	decoder->moveToThread(worker);
 	connect(decoder, SIGNAL(error(QString)), this, SLOT(errorString(QString)));
@@ -71,6 +82,8 @@ void vidStreamer::pbLoadClicked()
 	connect(decoder, SIGNAL(finished()), decoder, SLOT(deleteLater()));
 	connect(worker, SIGNAL(finished()), worker, SLOT(deleteLater()));
 	connect(decoder, SIGNAL(newFrame(const QImage &)), screen, SLOT(putFrame(const QImage &)));
+	connect(decoder, SIGNAL(newFrame(const QImage &)), spinn, SLOT(frameIn(const QImage &)));
+	connect(spinn, SIGNAL(frameOut(const QImage &)), edge, SLOT(putFrame(const QImage &)));
 	connect(decoder, SIGNAL(gotPicSz(int,int)), this, SLOT(setSize(int,int)));
 	connect(decoder, SIGNAL(finished()), this, SLOT(videoFinish()));
 	connect(refresh, SIGNAL(timeout()), decoder, SLOT(refresh()));
@@ -98,7 +111,8 @@ void vidStreamer::setSize(int w, int h)
 void vidStreamer::closeEvent(QCloseEvent *event)
 {
 	refresh->stop();
-	worker->quit();
+	//worker->exit();
+	//worker->quit();
 	screen->close();
 	edge->close();
 	event->accept();

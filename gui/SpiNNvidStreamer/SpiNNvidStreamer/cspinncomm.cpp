@@ -1,5 +1,7 @@
 #include "cspinncomm.h"
 #include <QHostAddress>
+#include <QDebug>
+#include <QApplication>
 
 // TODO: the following X_CHIPS and Y_CHIPS should be configurable
 // but now, let's make it convenient
@@ -33,11 +35,27 @@ cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
     sdpImgRedPort = 1;
     sdpImgGreenPort = 2;
     sdpImgBluePort = 3;
+	sdpImgReplyPort = 6;
     sdpImgConfigPort = 7;
 
-    // TODO: ask spinnaker, who's the leadAp
-    // right now, let's assume it is core-1
-    leadAp = 1;
+	// TODO: ask spinnaker, who's the leadAp
+	// right now, let's assume it is core-1
+	leadAp = 1;
+
+	// prepare headers for transmission
+	hdrr.flags = 0x07;
+	hdrr.tag = 0;
+	hdrr.dest_port = (sdpImgRedPort << 5) + leadAp;
+	hdrr.dest_addr = 0;
+	hdrr.srce_port = ETH_PORT;
+	hdrr.srce_addr = ETH_ADDR;
+
+	hdrg = hdrr; hdrg.dest_port = (sdpImgGreenPort << 5) + leadAp;
+	hdrb = hdrr; hdrb.dest_port = (sdpImgBluePort << 5) + leadAp;
+
+	cont2Send = false;
+
+
 }
 
 cSpiNNcomm::~cSpiNNcomm()
@@ -61,6 +79,11 @@ void cSpiNNcomm::readReply()
 	ba.resize(sdpReply->pendingDatagramSize());
 	sdpReply->readDatagram(ba.data(), ba.size());
 	// then process it before emit the signal
+
+	// during sending frame, spinnaker send reply as reportMsg via tag-1
+	// that goes through port-2000 (this sdpReply port)
+	// TODO: extract cmd_rc to make sure it is during image retrieval? No?
+	cont2Send = true;
 }
 
 void cSpiNNcomm::readResult()
@@ -76,6 +99,9 @@ void cSpiNNcomm::readResult()
 void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
 // @slot
 {
+	hImg = imgH;
+	wImg = imgW;
+
     sdp_hdr_t h;
     h.flags = 0x07;
     h.tag = 0;
@@ -86,7 +112,7 @@ void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
 
     cmd_hdr_t c;
     c.cmd_rc = SDP_CMD_CONFIG_CHAIN;
-    c.seq = OP_SOBEL_NO_FILTER;    // edge-proc sobel, no filtering
+	c.seq = OP_SOBEL_NO_FILTER;    // edge-proc sobel, no filtering, not grey
     c.arg1 = (imgW << 16) + imgH;
     // ushort rootNode = 0;
     // ushort nNodes = spinIDX == 0 ? 4 : MAX_CHIPS;
@@ -107,27 +133,32 @@ void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
 
 void cSpiNNcomm::sendSDP(sdp_hdr_t h, QByteArray s, QByteArray d)
 {
-    QByteArray ba = QByteArray(2, '\0');    // pad first
-    ba.append(hdr(h));
-    if(s.size()>0)
-        ba.append(s);
-    if(d.size()>0)
-        ba.append(s);
-    sender->writeDatagram(ba, ha, DEF_SEND_PORT);
+	QByteArray ba = QByteArray(2, '\0');    // pad first
+	ba.append(hdr(h));
+
+	if(s.size()>0) ba.append(s);
+
+	if(d.size()>0) ba.append(s);
+
+	sender->writeDatagram(ba, ha, DEF_SEND_PORT);
+	//sender->writeDatagram(ba, QHostAddress::Any, DEF_SEND_PORT);	// not working with Any
 }
 
 QByteArray cSpiNNcomm::scp(cmd_hdr_t cmd)
 {
-    QByteArray ba = QByteArray::number(cmd.cmd_rc);
-    ba.append(QByteArray::number(cmd.seq));
-    ba.append(QByteArray::number(cmd.arg1));
-    ba.append(QByteArray::number(cmd.arg2));
-    ba.append(QByteArray::number(cmd.arg3));
-    return ba;
+	QByteArray ba;
+
+	QDataStream stream(&ba, QIODevice::WriteOnly);
+	stream.setVersion(QDataStream::Qt_4_8);
+	stream.setByteOrder(QDataStream::LittleEndian);
+
+	stream << cmd.cmd_rc << cmd.seq << cmd.arg1 << cmd.arg2 << cmd.arg3;
+	return ba;
 }
 
 QByteArray cSpiNNcomm::hdr(sdp_hdr_t h)
 {
+	/* It doesn't work, because ::number creates more bytes :(
     QByteArray ba = QByteArray::number(h.flags);
     ba.append(QByteArray::number(h.tag));
     ba.append(QByteArray::number(h.dest_port));
@@ -135,6 +166,17 @@ QByteArray cSpiNNcomm::hdr(sdp_hdr_t h)
     ba.append(QByteArray::number(h.dest_addr));
     ba.append(QByteArray::number(h.srce_addr));
     return ba;
+	*/
+
+	QByteArray ba;
+
+	QDataStream stream(&ba, QIODevice::WriteOnly);
+	stream.setVersion(QDataStream::Qt_4_8);
+	stream.setByteOrder(QDataStream::LittleEndian);
+
+	stream << h.flags << h.tag << h.dest_port << h.srce_port << h.dest_addr << h.srce_addr;
+
+	return ba;
 }
 
 void cSpiNNcomm::setHost(int spinIDX)
@@ -144,3 +186,74 @@ void cSpiNNcomm::setHost(int spinIDX)
     else
         ha = QHostAddress(QString(SPIN5_IP));
 }
+
+void cSpiNNcomm::sendReply()
+{
+	sdp_hdr_t reply;
+	reply.flags = 0x07;
+	reply.tag = 0;
+	reply.dest_port = (sdpImgReplyPort << 5) + leadAp;
+	reply.srce_port = ETH_PORT;
+	reply.dest_addr = 0;
+	reply.srce_addr = 0;
+	sendSDP(reply);
+}
+
+void cSpiNNcomm::sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len)
+{
+	QByteArray sdp = QByteArray(2, '\0');    // pad first
+	sdp.append(hdr(h));
+	QByteArray data = QByteArray::fromRawData(pixel, len);
+	sdp.append(data);
+	sender->writeDatagram(sdp, ha, DEF_SEND_PORT);
+}
+
+// The reply from SpiNNaker will be sent as reportMsg via tag-1 (SDP_TAG_REPLY). It
+// contains cmd_rc SDP_CMD_REPLY_HOST_SEND_IMG
+void cSpiNNcomm::frameIn(const QImage &frame)
+{
+	// at this point SpiNNaker should know the configuration (image size, nodes, etc)
+	uchar rArray[1024];	//limited to 1024-wide frame
+	uchar gArray[1024];
+	uchar bArray[1024];
+
+	const char *rPtr = (const char *)rArray;
+	const char *gPtr = (const char *)gArray;
+	const char *bPtr = (const char *)bArray;
+
+	quint16 remaining, sz;
+
+	// for all lines in the image
+	for(int i=0; i<hImg; i++) {
+		memcpy(rArray, frame.scanLine(i), wImg);
+		memcpy(gArray, frame.scanLine(i)+wImg, wImg);
+		memcpy(bArray, frame.scanLine(i)+2*wImg, wImg);
+
+		// assumming colorful frame (not greyscale)
+		remaining = wImg;
+		while(remaining > 0) {
+			sz = remaining > 256+16 ? 256+16:remaining;
+			cont2Send = false;
+			sendImgLine(hdrr, rPtr, sz);
+			while(cont2Send==false) {
+				QApplication::processEvents();
+			}
+			cont2Send = false;
+			sendImgLine(hdrg, gPtr, sz);
+			while(cont2Send==false) {
+				QApplication::processEvents();
+			}
+			cont2Send = false;
+			sendImgLine(hdrb, bPtr, sz);
+			while(cont2Send==false) {
+				QApplication::processEvents();
+			}
+			// then adjust array position
+			rPtr += sz;
+			gPtr += sz;
+			bPtr += sz;
+			remaining -= sz;
+		}
+	}
+}
+

@@ -86,9 +86,10 @@ CHIP_LIST_20 = [[0,0],[1,0],[2,0],[3,0],[4,0],
 CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
 spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
 
-#spin5 = CHIP_LIST_48
-spin5 = CHIP_LIST_15
 #spin5 = CHIP_LIST_20
+#spin5 = CHIP_LIST_48
+spin5 = CHIP_LIST_15    # Sepertinya ini dah cukup untuk small video -> butuh 9-ms aja!
+#spin5 = CHIP_LIST_4
 #SPINN3_HOST = '192.168.240.1'
 SPINN3_HOST = '192.168.240.253'
 SPINN5_HOST = '192.168.240.1'
@@ -567,6 +568,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         seq = (isGray << 8) + opt
         arg1 = (self.w << 16) + self.h
         arg3 = ASK_BLOCK_REPORT
+        #arg3 = 1    # Let's see block distribution
 
         # find, what is the id of chip<0,0>
         chip0ID = 0
@@ -585,7 +587,7 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
         udpSock = QtNetwork.QUdpSocket()
         udpSock.writeDatagram(sdp, QtNetwork.QHostAddress(self.DEF_HOST), DEF_SEND_PORT)
 
-        time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
+        #time.sleep(1)   # wait a second, beri kesempatan spinnaker report work load via debugMsg
 
         """
         # Test sendAck

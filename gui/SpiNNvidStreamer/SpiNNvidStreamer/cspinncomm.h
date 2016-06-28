@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QUdpSocket>
 #include <QHostAddress>
+#include <QImage>
 
 #define SPIN3       0
 #define SPIN5       1
@@ -63,6 +64,7 @@ class cSpiNNcomm: public QObject
 public:
     cSpiNNcomm(QObject *parent=0);
     ~cSpiNNcomm();
+	QImage frame;
 
 public slots:
 	void readResult();
@@ -70,10 +72,15 @@ public slots:
 	void readDebug();
     void configSpin(uchar spinIDX, int imgW, int imgH);
     void setHost(int spinIDX);  //0=spin3, 1=spin5
+	void frameIn(const QImage &frame);
+	void sendReply();
+	void sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len);
+
 signals:
 	void gotResult(const QByteArray &data);
 	void gotReply(const QByteArray &data);
 	void gotDebug(const QByteArray &data);
+	void frameOut(const QImage &frame);
 private:
 	QUdpSocket *sdpResult;
 	QUdpSocket *sdpReply;
@@ -86,13 +93,20 @@ private:
     uchar sdpImgRedPort;            // = 1       # based on the aplx code
     uchar sdpImgGreenPort;          // = 2
     uchar sdpImgBluePort;           // = 3
+	uchar sdpImgReplyPort;			// = 6
     uchar sdpImgConfigPort;         // = 7
     static uchar X_CHIPS[48];       // must be static, otherwise it'll raise
     static uchar Y_CHIPS[48];       // is not a static data member of cSpiNNcomm
-    void sendSDP(sdp_hdr_t h, QByteArray s, QByteArray d);
+	void sendSDP(sdp_hdr_t h, QByteArray s = QByteArray(), QByteArray d = QByteArray());
     // helper functions:
     QByteArray hdr(sdp_hdr_t h);
     QByteArray scp(cmd_hdr_t cmd);
+	volatile bool cont2Send;
+
+	quint16 wImg, hImg;
+
+	// let's prepare header for image sending
+	sdp_hdr_t hdrr, hdrg, hdrb;
 };
 
 #endif // CSPINNCOMM_H

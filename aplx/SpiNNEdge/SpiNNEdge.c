@@ -26,8 +26,8 @@ void hDMADone(uint tid, uint tag)
 void notifyHostDone(uint arg0, uint arg1)
 {
 	//io_printf(IO_STD, "Processing done at %u => total = %u-microsec!\n", toc, total);
-	//io_printf(IO_STD, "Processing done in %d-msec !\n", total);
-	io_printf(IO_STD, "Processing done\n");
+	io_printf(IO_STD, "Processing done in %d-msec!\n", elapse);
+	//io_printf(IO_STD, "Processing done\n");
 	resultMsg.srce_addr = elapse;
 	resultMsg.length = sizeof(sdp_hdr_t);
 	spin1_send_sdp_msg(&resultMsg, 10);
@@ -115,6 +115,49 @@ void hMCPL(uint key, uint payload)
 			// check if "END-transmission" is sent
 		}
     }
+	else if((key & 0xFFFF0000) == MCPL_BCAST_IMG_INFO_BASE) {
+		if((key & 0xF) == 0) {
+			nodeCntr = 0;
+		}
+		// got node info?
+		else if((key & 0xF) == 2) {
+			// NOTE: the root (node-0) is chip<0,0>
+			chips[nodeCntr].id = (key >> 4) & 0xfff;
+			chips[nodeCntr].x = payload >> 16;
+			chips[nodeCntr].y = payload & 0xFFFF;
+			nodeCntr++;
+		}
+		// got image size and max block?
+		else if((key & 0xF) == 1) {
+			blkInfo->wImg = payload >> 16;
+			blkInfo->hImg = payload & 0xFFFF;
+			blkInfo->maxBlock = (key >> 4) & 0xfff;
+		}
+		// got operation type?
+		else if((key & 0xF) == 3) {
+			needSendDebug = (key >> 4) & 0xfff;
+			blkInfo->isGrey = payload >> 8;
+			switch(payload & 0xFF) {
+			case IMG_OP_SOBEL_NO_FILT:
+				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_SOBEL;
+				break;
+			case IMG_OP_SOBEL_WITH_FILT:
+				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_SOBEL;
+				break;
+			case IMG_OP_LAP_NO_FILT:
+				blkInfo->opFilter = IMG_NO_FILTERING; blkInfo->opType = IMG_LAPLACE;
+				break;
+			case IMG_OP_LAP_WITH_FILT:
+				blkInfo->opFilter = IMG_WITH_FILTERING; blkInfo->opType = IMG_LAPLACE;
+				break;
+			}
+		}
+		// got EOF?
+		else {
+			//io_printf(IO_BUF, "Got EOF key-0x%x, payload-0x%x\n", key, payload);
+			spin1_schedule_callback(initNode, 0, 0, PRIORITY_PROCESSING);
+		}
+	}
 	else {
 		io_printf(IO_BUF, "Got key-0x%x, payload-0x%x\n", key, payload);
 	}
@@ -160,7 +203,8 @@ void c_main()
 		workers.wID[0] = myCoreID;
 		workers.tAvailable = 1;
 		workers.subBlockID = 0;	// leadAp has task ID-0
-		chips = NULL;
+		//chips = NULL;
+		nodeCntr = 0;
 		initRouter();
 		initIPTag();
 	}
