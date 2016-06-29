@@ -17,7 +17,7 @@ public:
 	QGraphicsScene *scene;
 	QImage frame;
 signals:
-
+	void renderDone();
 public slots:
 	void setSize(int w, int h);
 	void putFrame(const QImage &frame);

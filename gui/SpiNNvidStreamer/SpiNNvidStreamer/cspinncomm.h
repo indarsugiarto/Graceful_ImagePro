@@ -23,7 +23,7 @@
 #define BLOCK_REPORT_NO         0
 #define BLOCK_REPORT_YES        1
 
-#define MAX_CHIPS               15  // how many chips will be used?
+#define MAX_CHIPS               48  // how many chips will be used?
 typedef struct sdp_hdr		// SDP header
 {
   uchar flags;
@@ -54,7 +54,7 @@ typedef struct nodeInfo
 #define SDP_RESULT_PORT	20001		// with tag 2
 #define SDP_DEBUG_PORT  20002		// with tag 3
 #define DEF_SEND_PORT	17893		// tidak bisa diganti dengan yang lain
-
+#define SDP_IMAGE_CHUNK	272
 #define SDP_
 
 class cSpiNNcomm: public QObject
@@ -64,7 +64,7 @@ class cSpiNNcomm: public QObject
 public:
     cSpiNNcomm(QObject *parent=0);
     ~cSpiNNcomm();
-	QImage frame;
+	QImage *frResult;
 
 public slots:
 	void readResult();
@@ -74,13 +74,14 @@ public slots:
     void setHost(int spinIDX);  //0=spin3, 1=spin5
 	void frameIn(const QImage &frame);
 	void sendReply();
-	void sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len);
+	void sendImgLine(sdp_hdr_t h, uchar *pixel, quint16 len);
 
 signals:
 	void gotResult(const QByteArray &data);
 	void gotReply(const QByteArray &data);
 	void gotDebug(const QByteArray &data);
 	void frameOut(const QImage &frame);
+
 private:
 	QUdpSocket *sdpResult;
 	QUdpSocket *sdpReply;
@@ -103,10 +104,15 @@ private:
     QByteArray scp(cmd_hdr_t cmd);
 	volatile bool cont2Send;
 
-	quint16 wImg, hImg;
+	quint16 wImg, hImg, szImg;
 
 	// let's prepare header for image sending
 	sdp_hdr_t hdrr, hdrg, hdrb;
+
+	volatile bool ResultTriggered;
+	volatile bool w272;				// will be used to indicate that the width is special
+	QByteArray pixelBuffer;
+	QByteArray pxBuff[3];
 };
 
 #endif // CSPINNCOMM_H

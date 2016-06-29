@@ -47,7 +47,7 @@
 # Yang lain
 *.json
 *.pyc
-*.pro.user
+*.pro.user*
 *.aplx
 run*
 

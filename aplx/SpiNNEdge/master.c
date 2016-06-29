@@ -208,7 +208,7 @@ void getImage(sdp_msg_t *msg, uint port)
 		// send reply immediately only if the sender is host-PC
 		// if(msg->srce_port == PORT_ETH)	// no, because we have modified srce_port in chainMode 1
 		if(chainMode == 0 || (chainMode == 1 && sv->p2p_addr == 0)) {
-            // io_printf(IO_STD, "Replied!\n");
+			// io_printf(IO_STD, "Replied!\n");
 			sendReply(dLen, 0);
 		}
 
@@ -221,44 +221,6 @@ void getImage(sdp_msg_t *msg, uint port)
         spin1_send_mc_packet(MCPL_BCAST_IMG_READY, port, WITH_PAYLOAD);
 #endif
         afterCollectPixel(port, 0);
-        /*
-        sark_free(dtcmImgBuf);
-		dtcmImgBuf = NULL;	// reset ImgBuffer in DTCM
-		switch(port) {
-		case SDP_PORT_R_IMG_DATA:
-            io_printf(IO_BUF, "layer-R is complete!\n");
-			blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
-			blkInfo->fullRImageRetrieved = 1;
-			break;
-		case SDP_PORT_G_IMG_DATA:
-            io_printf(IO_BUF, "layer-G is complete!\n");
-			blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
-			blkInfo->fullGImageRetrieved = 1;
-			break;
-		case SDP_PORT_B_IMG_DATA:
-			io_printf(IO_BUF, "layer-B is complete!\n");
-			blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
-			blkInfo->fullBImageRetrieved = 1;
-			break;
-		}
-
-		// check: if the image in memory of all chips are similar
-		// io_printf(IO_STD, "Please check my content!\n"); // --> OK!
-
-		// if grey or at the end of B image transmission, it should trigger processing
-		if(blkInfo->isGrey==1 || port==SDP_PORT_B_IMG_DATA) {
-            if(sv->p2p_addr==0) {
-				//io_printf(IO_STD, "Image retrieved! Start processing at %d!\n", sv->time_ms);
-				tic = sv->clock_ms;
-				io_printf(IO_STD, "Image retrieved! Start processing at %u!\n", tic);
-                resultMsg.length = sizeof(sdp_hdr_t);   // send empty message
-                resultMsg.srce_port = myCoreID;
-                resultMsg.srce_addr = sv->p2p_addr;
-                spin1_send_sdp_msg(&resultMsg, 10);
-            }
-			spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
-		}
-        */
     }
 }
 
@@ -345,7 +307,8 @@ void afterCollectPixel(uint port, uint Unused)
             resultMsg.srce_addr = sv->p2p_addr;
             spin1_send_sdp_msg(&resultMsg, 10);
         }
-        spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
+		// Indar: disable this to coba lihat apa konten memori sudah benar
+		spin1_schedule_callback(triggerProcessing, 0, 0, PRIORITY_PROCESSING);
     }
 }
 
@@ -522,15 +485,15 @@ void hSDP(uint mBox, uint port)
     // if host send images
 	// NOTE: what if we use arg part of SCP for image data? OK let's try, because see HOW.DO...
 	else if(port==SDP_PORT_R_IMG_DATA) {
-        // io_printf(IO_STD, "R-images\n");
+		// io_printf(IO_STD, "R-images\n");
 		getImage(msg, SDP_PORT_R_IMG_DATA);
 	}
 	else if(port==SDP_PORT_G_IMG_DATA) {
-        // io_printf(IO_STD, "G-images\n");
+		// io_printf(IO_STD, "G-images\n");
         getImage(msg, SDP_PORT_G_IMG_DATA);
 	}
 	else if(port==SDP_PORT_B_IMG_DATA) {
-        // io_printf(IO_STD, "B-images\n");
+		// io_printf(IO_STD, "B-images\n");
         getImage(msg, SDP_PORT_B_IMG_DATA);
 	}
 	spin1_msg_free(msg);
@@ -646,13 +609,14 @@ void sendResult(uint arg0, uint arg1)
                 // wait for ack if not root-node
                 // somehow, root-node doesn't respond to hSDP
                 if(sv->p2p_addr != 0) {
-                    //io_printf(IO_STD, "Waiting ack...\n");
+					//io_printf(IO_STD, "Waiting ack...\n");
                     while(hostAck==0) {
 
                     }
+					// io_printf(IO_BUF, "Got reply! Continue...\n");
                 } else {
-                    io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
-                              lines, c+1, resultMsg.tag);
+					// io_printf(IO_BUF, "[Sending] rgbCh-%d, line-%d, chunk-%d via tag-%d\n", rgb,
+					//          lines, c+1, resultMsg.tag);
 
                     spin1_delay_us(SDP_TX_TIMEOUT);
                     //spin1_delay_us(SDP_TX_TIMEOUT + blkInfo->maxBlock*10);

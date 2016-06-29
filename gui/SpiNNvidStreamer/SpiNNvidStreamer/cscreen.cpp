@@ -32,15 +32,19 @@ void cScreen::drawFrame()
 	pixmap.convertFromImage(frame);
 	scene->clear();
 	scene->addPixmap(pixmap);
+	emit renderDone();
 }
 
 void cScreen::putFrame(const QImage &frameku)
 {
-	//frame = frameku;
+	frame = frameku;
+	drawFrame();
+	/*
 	QPixmap pixmap;
 	pixmap.convertFromImage(frameku);
 	scene->clear();
 	scene->addPixmap(pixmap);
+	*/
 }
 
 void cScreen::setSize(int w, int h){

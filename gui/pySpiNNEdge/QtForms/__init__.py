@@ -87,8 +87,8 @@ CHIP_LIST_4 = [[0,0],[1,0],[0,1],[1,1]]
 spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chip<0,0>, etc.
 
 #spin5 = CHIP_LIST_20
-#spin5 = CHIP_LIST_48
-spin5 = CHIP_LIST_15    # Sepertinya ini dah cukup untuk small video -> butuh 9-ms aja!
+spin5 = CHIP_LIST_48
+#spin5 = CHIP_LIST_15    # Sepertinya ini dah cukup untuk small video -> butuh 9-ms aja!
 #spin5 = CHIP_LIST_4
 #SPINN3_HOST = '192.168.240.1'
 SPINN3_HOST = '192.168.240.253'

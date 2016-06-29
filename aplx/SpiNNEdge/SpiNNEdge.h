@@ -30,8 +30,8 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	5
 
-#define USE_SPIN3
-//#define USE_SPIN5
+//#define USE_SPIN3
+#define USE_SPIN5
 
 #define USE_MCPL_FOR_FWD
 

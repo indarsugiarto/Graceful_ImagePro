@@ -2,6 +2,10 @@
 #include <QHostAddress>
 #include <QDebug>
 #include <QApplication>
+#include <QColor>
+
+//for debugging
+#include <QFileDialog>
 
 // TODO: the following X_CHIPS and Y_CHIPS should be configurable
 // but now, let's make it convenient
@@ -10,7 +14,10 @@ uchar cSpiNNcomm::X_CHIPS[48] = {0,1,0,1,2,3,4,2,3,4,5,0,1,2,3,4,5,6,0,1,2,3,4,5
 uchar cSpiNNcomm::Y_CHIPS[48] = {0,0,1,1,0,0,0,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,3,
                                  3,3,4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,7,7,7,7};
 
-cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
+cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent),
+	frResult(NULL),
+	ResultTriggered(false),
+	w272(false)
 {
     // initialize nodes
     for(ushort i=0; i<MAX_CHIPS; i++) {
@@ -60,6 +67,8 @@ cSpiNNcomm::cSpiNNcomm(QObject *parent): QObject(parent)
 
 cSpiNNcomm::~cSpiNNcomm()
 {
+	if(frResult != NULL)
+		delete frResult;
     delete sdpReply;
     delete sdpResult;
     delete sdpDebug;
@@ -93,6 +102,64 @@ void cSpiNNcomm::readResult()
 	sdpResult->readDatagram(ba.data(), ba.size());
 	// then process it before emit the signal
     // TODO: getImage()
+	// at this point frResult should be ready
+	if(ba.size() > 10) {
+		// send acknowledge sendReply() == sendAck()
+		sendReply();
+
+		int lines, rgb;		// rgb = channel
+		/*
+		// NOTE: let's assume that the width is note 272 (256+16)
+		QByteArray srce_port(1, '\0');
+		srce_port[0] = ba[5];
+
+		QByteArray srce_addr(2, '\0');
+		srce_addr[0] = ba[8];
+		srce_addr[1] = ba[9];
+
+		// So, we don't care about the line
+		QDataStream lStream(&srce_addr, QIODevice::ReadOnly);
+		lStream.setVersion(QDataStream::Qt_4_8);
+		lStream.setByteOrder(QDataStream::LittleEndian);
+		lStream >> lines;
+		lines = lines >> 2;
+
+		QDataStream cStream(&srce_addr, QIODevice::ReadOnly);
+		cStream.setVersion(QDataStream::Qt_4_8);
+		cStream.setByteOrder(QDataStream::LittleEndian);
+		cStream >> rgb;
+		*/
+		rgb = ba[8] & 3;
+		//rgb = rgb & 3;
+
+		// copy to pixelBuffer
+		ba.remove(0, 10);	// remove the header
+		pxBuff[rgb].append(ba);
+	}
+	else {
+		// if spinnaker send notification of starting process
+		if(ResultTriggered==false) {
+			ResultTriggered=true;
+		}
+		// then the processing is finish
+		else {
+			ResultTriggered=false;	// prepare for the next
+			// copy to frResult
+			int cntr = 0;
+			QRgb value;
+			for(int y=0; y<hImg; y++)
+				for(int x=0; x<wImg; x++) {
+					value = qRgb(pxBuff[0][cntr], pxBuff[1][cntr], pxBuff[2][cntr]);
+					frResult->setPixel(x, y, value);
+					cntr++;
+				}
+			// then emit the result
+			emit frameOut(*frResult);
+			// and clear pixel buffers
+			for(int i=0; i<3; i++)
+				pxBuff[i].clear();
+		}
+	}
 }
 
 // configure SpiNNaker to calculate workloads
@@ -102,6 +169,11 @@ void cSpiNNcomm::configSpin(uchar spinIDX, int imgW, int imgH)
 {
 	hImg = imgH;
 	wImg = imgW;
+	szImg = imgH * imgW;
+	for(int i=0; i<3; i++) pxBuff[i].clear();
+
+	// w272 will determine how the result from spinnaker will be handled (see readResult() )
+	if(wImg==272) w272 = true; else w272 = false;
 
     sdp_hdr_t h;
     h.flags = 0x07;
@@ -200,12 +272,12 @@ void cSpiNNcomm::sendReply()
 	sendSDP(reply);
 }
 
-void cSpiNNcomm::sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len)
+void cSpiNNcomm::sendImgLine(sdp_hdr_t h, uchar *pixel, quint16 len)
 {
     QByteArray sdp = QByteArray(2, '\0');    // pad first
     sdp.append(hdr(h));
     if(len > 0) {
-        QByteArray data = QByteArray::fromRawData(pixel, len);
+		QByteArray data = QByteArray::fromRawData((const char*)pixel, len);
         sdp.append(data);
     }
     sender->writeDatagram(sdp, ha, DEF_SEND_PORT);
@@ -213,28 +285,100 @@ void cSpiNNcomm::sendImgLine(sdp_hdr_t h, const char *pixel, quint16 len)
 
 // The reply from SpiNNaker will be sent as reportMsg via tag-1 (SDP_TAG_REPLY). It
 // contains cmd_rc SDP_CMD_REPLY_HOST_SEND_IMG
+// Do you know why we cannot use scanline with uchar directly? See this:
+// http://stackoverflow.com/questions/2095039/qt-qimage-pixel-manipulation
 void cSpiNNcomm::frameIn(const QImage &frame)
 {
 	// at this point SpiNNaker should know the configuration (image size, nodes, etc)
-	uchar rArray[1024];	//limited to 1024-wide frame
-	uchar gArray[1024];
-	uchar bArray[1024];
 
-    const char *rPtr;
-    const char *gPtr;
-    const char *bPtr;
+	// prepare the result
+	if(frResult != NULL)
+		delete frResult;
+	frResult = new QImage(frame.width(), frame.height(), QImage::Format_RGB888);
 
-	quint16 remaining, sz;
+	quint16 remaining = szImg, sz;
+
+	/*
+	uchar *rCh, *gCh, *bCh;
+	rCh = (uchar *)malloc(szImg);
+	gCh = (uchar *)malloc(szImg);
+	bCh = (uchar *)malloc(szImg);
+
+	QColor px;
+	quint16 remaining = szImg, sz;
+	int cntr = 0;
+	for(int y=0; y<hImg; y++) {
+		for(int x=0; x<wImg; x++) {
+			px = QColor(frame.pixel(x,y));
+			rCh[cntr] = px.red();
+			gCh[cntr] = px.green();
+			bCh[cntr] = px.blue();
+			cntr++;
+		}
+	}
+
+	while(remaining > 0) {
+		QApplication::processEvents();
+		sz = remaining > SDP_IMAGE_CHUNK ? SDP_IMAGE_CHUNK : remaining;
+		cont2Send = false;
+		sendImgLine(hdrr, rCh, sz);
+		while(cont2Send==false) {
+			QApplication::processEvents();
+		}
+		cont2Send = false;
+		sendImgLine(hdrg, gCh, sz);
+		while(cont2Send==false) {
+			QApplication::processEvents();
+		}
+		cont2Send = false;
+		sendImgLine(hdrb, bCh, sz);
+		while(cont2Send==false) {
+			QApplication::processEvents();
+		}
+		rCh += sz;
+		gCh += sz;
+		bCh += sz;
+		remaining -= sz;
+	}
+	// then we have to send just headers to indicate end of image
+	sendImgLine(hdrr, NULL, 0);
+	sendImgLine(hdrg, NULL, 0);
+	sendImgLine(hdrb, NULL, 0);
+
+	free(rCh); free(gCh); free(bCh);
+	*/
+
+
+	// prepare the container
+	uchar rArray[4096];	//limited to 1024-wide frame
+	uchar gArray[4096];
+	uchar bArray[4096];
+	// and its pointer
+//    const char *rPtr;
+//    const char *gPtr;
+//    const char *bPtr;
+	uchar *rPtr;
+	uchar *gPtr;
+	uchar *bPtr;
+
 
 	// for all lines in the image
 	for(int i=0; i<hImg; i++) {
-		memcpy(rArray, frame.scanLine(i), wImg);
-		memcpy(gArray, frame.scanLine(i)+wImg, wImg);
-		memcpy(bArray, frame.scanLine(i)+2*wImg, wImg);
+		for(int j=0; j<wImg; j++) {
+			rArray[j] = QColor(frame.pixel(j,i)).red();
+			gArray[j] = QColor(frame.pixel(j,i)).green();
+			bArray[j] = QColor(frame.pixel(j,i)).blue();
+		}
+//		memcpy(rArray, frame.scanLine(i)+1, wImg);
+//		memcpy(gArray, frame.scanLine(i)+wImg+1, wImg);
+//		memcpy(bArray, frame.scanLine(i)+2*wImg+1, wImg);
 
-        rPtr = (const char *)rArray;
-        gPtr = (const char *)gArray;
-        bPtr = (const char *)bArray;
+//        rPtr = (const char *)rArray;
+//        gPtr = (const char *)gArray;
+//        bPtr = (const char *)bArray;
+		rPtr = rArray;
+		gPtr = gArray;
+		bPtr = bArray;
 		// assumming colorful frame (not greyscale)
 		remaining = wImg;
 		while(remaining > 0) {

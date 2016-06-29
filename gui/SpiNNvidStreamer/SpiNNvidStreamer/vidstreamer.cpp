@@ -25,8 +25,8 @@ vidStreamer::vidStreamer(QWidget *parent) :
     connect(ui->cbSpiNN, SIGNAL(currentIndexChanged(int)), spinn,
             SLOT(setHost(int)));
 
-	//refresh->setInterval(40);   // which produces roughly 25fps
-	refresh->setInterval(1000);   // which produces roughly 1fps
+	refresh->setInterval(40);   // which produces roughly 25fps
+	//refresh->setInterval(1000);   // which produces roughly 1fps
 	refresh->start();
 	//connect(refresh, SIGNAL(timeout()), this, SLOT(refreshUpdate()));
 
@@ -91,7 +91,8 @@ void vidStreamer::pbLoadClicked()
 	connect(spinn, SIGNAL(frameOut(const QImage &)), edge, SLOT(putFrame(const QImage &)));
 	connect(decoder, SIGNAL(gotPicSz(int,int)), this, SLOT(setSize(int,int)));
 	connect(decoder, SIGNAL(finished()), this, SLOT(videoFinish()));
-	connect(refresh, SIGNAL(timeout()), decoder, SLOT(refresh()));
+	//connect(refresh, SIGNAL(timeout()), decoder, SLOT(refresh()));
+	connect(edge, SIGNAL(renderDone()), decoder, SLOT(refresh()));
 
 	decoder->filename = fName;
 	worker->start();
@@ -100,6 +101,7 @@ void vidStreamer::pbLoadClicked()
 
 void vidStreamer::refreshUpdate()
 {
+	return;	// disable 25fps update
 	screen->drawFrame();
 	edge->drawFrame();
 }
