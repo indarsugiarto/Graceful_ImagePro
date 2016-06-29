@@ -87,7 +87,13 @@ void vidStreamer::pbLoadClicked()
 	connect(decoder, SIGNAL(finished()), decoder, SLOT(deleteLater()));
 	connect(worker, SIGNAL(finished()), worker, SLOT(deleteLater()));
 	connect(decoder, SIGNAL(newFrame(const QImage &)), screen, SLOT(putFrame(const QImage &)));
+
+	// use the following to send the image from decoder to spinnaker
 	connect(decoder, SIGNAL(newFrame(const QImage &)), spinn, SLOT(frameIn(const QImage &)));
+
+	// use the following to send the image from decoder to edge-screener
+	//connect(decoder, SIGNAL(newFrame(QImage)), edge, SLOT(putFrame(QImage)));
+
 	connect(spinn, SIGNAL(frameOut(const QImage &)), edge, SLOT(putFrame(const QImage &)));
 	connect(decoder, SIGNAL(gotPicSz(int,int)), this, SLOT(setSize(int,int)));
 	connect(decoder, SIGNAL(finished()), this, SLOT(videoFinish()));

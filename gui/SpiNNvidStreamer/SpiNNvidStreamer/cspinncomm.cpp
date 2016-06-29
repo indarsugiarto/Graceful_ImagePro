@@ -158,6 +158,17 @@ void cSpiNNcomm::readResult()
 			// and clear pixel buffers
 			for(int i=0; i<3; i++)
 				pxBuff[i].clear();
+			// how fast?
+			quint16 speed;
+
+			QByteArray srce_addr(2, '\0');
+			srce_addr[0] = ba[8];
+			srce_addr[1] = ba[9];
+			QDataStream lStream(&srce_addr, QIODevice::ReadOnly);
+			lStream.setVersion(QDataStream::Qt_4_8);
+			lStream.setByteOrder(QDataStream::LittleEndian);
+			lStream >> speed;
+			qDebug() << QString("SpiNNaker processing time: %1-ms").arg(speed);
 		}
 	}
 }

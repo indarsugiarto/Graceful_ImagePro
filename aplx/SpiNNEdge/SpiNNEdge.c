@@ -26,7 +26,7 @@ void hDMADone(uint tid, uint tag)
 void notifyHostDone(uint arg0, uint arg1)
 {
 	//io_printf(IO_STD, "Processing done at %u => total = %u-microsec!\n", toc, total);
-	io_printf(IO_STD, "Processing done in %d-msec!\n", elapse);
+	//io_printf(IO_STD, "Processing done in %d-msec!\n", elapse);
 	//io_printf(IO_STD, "Processing done\n");
 	resultMsg.srce_addr = elapse;
 	resultMsg.length = sizeof(sdp_hdr_t);

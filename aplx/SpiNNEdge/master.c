@@ -278,17 +278,17 @@ void afterCollectPixel(uint port, uint Unused)
 	*/
     switch(port) {
     case SDP_PORT_R_IMG_DATA:
-        io_printf(IO_BUF, "layer-R is complete!\n");
+		//io_printf(IO_BUF, "layer-R is complete!\n");
         blkInfo->imgRIn = (char *)IMG_R_BUFF0_BASE;	// reset to initial base position
         blkInfo->fullRImageRetrieved = 1;
         break;
     case SDP_PORT_G_IMG_DATA:
-        io_printf(IO_BUF, "layer-G is complete!\n");
+		//io_printf(IO_BUF, "layer-G is complete!\n");
         blkInfo->imgGIn = (char *)IMG_G_BUFF0_BASE;	// reset to initial base position
         blkInfo->fullGImageRetrieved = 1;
         break;
     case SDP_PORT_B_IMG_DATA:
-        io_printf(IO_BUF, "layer-B is complete!\n");
+		//io_printf(IO_BUF, "layer-B is complete!\n");
         blkInfo->imgBIn = (char *)IMG_B_BUFF0_BASE;	// reset to initial base position
         blkInfo->fullBImageRetrieved = 1;
         break;
@@ -300,8 +300,10 @@ void afterCollectPixel(uint port, uint Unused)
         if(sv->p2p_addr==0) {
 			// send empty sdp just to notify host that spinnaker is starting to process
             tic = sv->clock_ms;
+			/*
 			io_printf(IO_STD, "Full image is retrieved! Start processing at %u by chip-%d!\n",
 					  tic, sv->p2p_addr);
+			*/
             resultMsg.length = sizeof(sdp_hdr_t);   // send empty message
             resultMsg.srce_port = myCoreID;
             resultMsg.srce_addr = sv->p2p_addr;
@@ -552,8 +554,10 @@ void sendResult(uint arg0, uint arg1)
 	ushort l,c;
 
 	// dtcmImgBuf should be NULL at this point
+	/*
 	if(dtcmImgBuf != NULL)
 		io_printf(IO_BUF, "[Sending] Warning, dtcmImgBuf is not free!\n");
+	*/
 	dtcmImgBuf == sark_alloc(workers.wImg, sizeof(uchar));
 	dLen = SDP_BUF_SIZE + sizeof(cmd_hdr_t);
 

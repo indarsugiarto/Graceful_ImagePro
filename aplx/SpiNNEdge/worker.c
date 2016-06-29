@@ -123,7 +123,7 @@ void imgFiltering(uint arg0, uint arg1)
 
 void imgDetection(uint arg0, uint arg1)
 {
-	io_printf(IO_BUF, "Begin edge detection...\n");
+	//io_printf(IO_BUF, "Begin edge detection...\n");
 	ushort szMask = blkInfo->opType == IMG_SOBEL ? 3:5;
 	ushort offset = blkInfo->opType == IMG_SOBEL ? 1:2;
 	ushort w = blkInfo->wImg;
