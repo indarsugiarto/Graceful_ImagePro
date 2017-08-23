@@ -180,6 +180,10 @@ void c_main()
 	spin1_callback_on(DMA_TRANSFER_DONE, hDMADone, PRIORITY_DMA);
 	initSDP();	// sebelumnya hanya leadAp, tapi masalahnya semua core butuh reportMsg dan debugMsg
 
+	// enable timer-2
+	ENABLE_TIMER ();	// Enable timer (once)
+
+
 	// only leadAp has access to dma and sdp
 	if(leadAp) {
 

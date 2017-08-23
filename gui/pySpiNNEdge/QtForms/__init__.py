@@ -1,3 +1,9 @@
+# Untuk ekserimen buat paper:
+imgName = "../../../images/4paper/Elephant-vga.bmp"
+#imgName = "../../../images/4paper/Elephant-svga.bmp"
+#imgName = "../../../images/4paper/Elephant-xga.bmp"
+#imgName = "../../../images/4paper/Elephant-sxga.bmp"
+
 """
 The idea is:
 - Use QImage for direct pixel manipulation and use QPixmap for rendering
@@ -89,14 +95,14 @@ spin3 = CHIP_LIST_4 #then, we can access like spin3[0], which corresponds to chi
 #spin5 = CHIP_LIST_20
 spin5 = CHIP_LIST_48
 #spin5 = CHIP_LIST_15    # Sepertinya ini dah cukup untuk small video -> butuh 9-ms aja!
-#spin5 = CHIP_LIST_4
+# spin5 = CHIP_LIST_4
 #SPINN3_HOST = '192.168.240.1'
 SPINN3_HOST = '192.168.240.253'
 SPINN5_HOST = '192.168.240.1'
 
 # Which SpiNNaker board?
-# spiNN = spin5
-spiNN = spin3
+spiNN = spin5
+#spiNN = spin3
 
 DEF_SEND_PORT = 17893 #tidak bisa diganti dengan yang lain
 # in the aplx, it is defined:
@@ -142,8 +148,9 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
     # The following signals MUST defined here, NOT in the init()
     sdpUpdate = QtCore.pyqtSignal('QByteArray')  # for streaming data
     okToClose = True
-    def __init__(self, def_image_dir = "./", parent=None):
+    def __init__(self, def_image_dir = "./", jmlNode = 4, parent=None):
         self.img_dir = def_image_dir
+        self.N_nodes = jmlNode
         self.img = None
         self.res = None
         self.continyu = True
@@ -187,6 +194,10 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
         self.debugVal = 0
         self.ResultTriggered = False
+        ttl = "Image Edge Detector with {} nodes".format(self.N_nodes)
+        self.setWindowTitle(ttl)
+        self.pbLoadClicked()
+        self.pbSendClicked()
 
     @QtCore.pyqtSlot(int)
     def cbSpiNNChanged(self, idx):
@@ -262,8 +273,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
                 sa = datagram[8:10]
                 el = struct.unpack('H', sa)
-                #print "done in {} millisecs!".format(elapse)
-                print "done in {} millisecs!".format(el[0])
+                #print "done in {} microsecs!".format(el[0])
+                print "done in {} milliseconds!".format(el[0])
                 self.ResultTriggered = False
                 self.ProcessInProgress = False
                 #self.trx.setVal(0)
@@ -457,11 +468,16 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
 
     @QtCore.pyqtSlot()
     def pbLoadClicked(self):
+        """
         self.fName = QtGui.QFileDialog.getOpenFileName(parent=self, caption="Load an image from file", \
                                                        directory = self.img_dir, filter = "*.*")
         #print self.fName    #this will contains the full path as well!
         if self.fName == "" or self.fName is None:
             return
+        """
+        # bypass buat percobaan
+        self.fName = imgName
+
         self.img = QtGui.QImage()
         self.img.load(self.fName)
         self.w = self.img.width()
@@ -531,7 +547,8 @@ class edgeGUI(QtGui.QWidget, mainGUI.Ui_pySpiNNEdge):
                 #exampleConf[2]=[0,1]
                 #exampleConf[3]=[1,1]
             else:
-                for i in range(len(spin5)):
+                # for i in range(len(spin5)):
+                for i in range(self.N_nodes):
                     exampleConf[i] = spin5[i]
             self.sendBcastImg(exampleConf)
 

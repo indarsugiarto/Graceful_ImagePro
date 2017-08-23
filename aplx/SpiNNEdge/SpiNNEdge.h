@@ -30,6 +30,25 @@
 #define MAJOR_VERSION	0
 #define MINOR_VERSION	5
 
+
+/*--------------------------------- timer 2 ----------------------------------*/
+// Use "timer2" to measure elapsed time.
+// Times up to around 10 sec should be OK.
+
+#define CLK_FREQ	200		// karena mungkin kita akan coba lain freq
+
+// Enable timer - free running, 32-bit
+#define ENABLE_TIMER() tc[T2_CONTROL] = 0x82
+
+// To measure, set timer to 0
+#define START_TIMER() tc[T2_LOAD] = 0
+
+// Read timer and compute time (microseconds)
+//#define READ_TIMER() ((0 - tc[T2_COUNT]) / sark.cpu_clk)
+#define READ_TIMER() ((0 - tc[T2_COUNT]) / CLK_FREQ)
+
+/*-----------------------------------------------------------------------------*/
+
 //#define USE_SPIN3
 #define USE_SPIN5
 
@@ -60,7 +79,7 @@ static const short FILT[5][5] = {{2,4,5,4,2},
 				   {2,4,5,4,2}};
 static const short FILT_DENOM = 159;
 
-#define SDP_TX_TIMEOUT          300
+#define SDP_TX_TIMEOUT          500
 //#define SDP_TX_TIMEOUT          10000000
 
 #define MAX_NODES				48	// for Spin5, at the moment

@@ -300,6 +300,8 @@ void afterCollectPixel(uint port, uint Unused)
         if(sv->p2p_addr==0) {
 			// send empty sdp just to notify host that spinnaker is starting to process
             tic = sv->clock_ms;
+			// let's see with timer 2
+			START_TIMER ();	// Start measuring
 			/*
 			io_printf(IO_STD, "Full image is retrieved! Start processing at %u by chip-%d!\n",
 					  tic, sv->p2p_addr);
@@ -652,8 +654,13 @@ void afterEdgeDone(uint arg0, uint arg1)
     if(blkInfo->nodeBlockID==0)	{   // trigger the chain
         //spin1_schedule_callback(sendResult, 0, 0, PRIORITY_PROCESSING);
         spin1_schedule_callback(sendResult, 0, 0, PRIORITY_LOWEST);
+
+
 		toc = sv->clock_ms;
 		elapse = toc-tic;	// in milliseconds
+
+		// coba pakai timer 2:
+		//elapse = READ_TIMER();
     }
 		// sendResult(0, 0);
 }
